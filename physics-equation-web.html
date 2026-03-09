@@ -1,0 +1,1554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AQA Physics — Equation Web</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #080c14;
+  --mech:   #f0a500;
+  --waves:  #00d68f;
+  --parts:  #ff6b9d;
+  --elec:   #9b8fff;
+  --shm:    #ffe57a;
+  --fields: #4dabf7;
+  --nuke:   #ffa94d;
+  --therm:  #ff6b6b;
+  --astro:  #38d9d9;
+}
+
+html, body {
+  width: 100%; height: 100%;
+  overflow: hidden;
+  font-family: 'Outfit', sans-serif;
+  background: var(--bg);
+  color: #e0eaf8;
+}
+
+/* ── CANVAS LAYER ── */
+#link-canvas {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* ── NODE LAYER ── */
+#node-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+/* ── WORLD (single transform container) ── */
+#world {
+  position: absolute;
+  top: 0; left: 0;
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+
+.node-card {
+  position: absolute;
+  width: 148px;
+  pointer-events: auto;
+  cursor: pointer;
+  user-select: none;
+}
+
+.node-inner {
+  background: #0d1526;
+  border-radius: 8px;
+  border: 1.5px solid rgba(255,255,255,0.08);
+  padding: 8px 10px 7px;
+  border-left: 3.5px solid var(--tc);
+  transition: background 0.18s, border-color 0.18s, transform 0.18s;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.5);
+}
+
+.node-card:hover .node-inner,
+.node-card.selected .node-inner {
+  background: #14213a;
+  transform: scale(1.04);
+}
+
+.node-card.selected .node-inner {
+  border-left-color: var(--tc);
+  border-color: var(--tc);
+  box-shadow: 0 0 0 2px var(--tc), 0 4px 24px rgba(0,0,0,0.7);
+}
+
+.node-card.dimmed {
+  opacity: 0.12;
+  pointer-events: none;
+}
+
+.node-card.neighbour .node-inner {
+  background: #111c30;
+  border-left-width: 3.5px;
+}
+
+.node-formula {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #ffffff;
+  line-height: 1.3;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.node-name {
+  font-size: 9.5px;
+  font-weight: 500;
+  color: rgba(180,200,230,0.55);
+  margin-top: 3px;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.node-topic-dot {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: var(--tc);
+  display: inline-block;
+  margin-right: 5px;
+  vertical-align: middle;
+  margin-top: -1px;
+  opacity: 0.8;
+}
+
+/* ── TOP BAR ── */
+#topbar {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 100;
+  height: 54px;
+  background: rgba(8,12,20,0.92);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 18px;
+  backdrop-filter: blur(16px);
+}
+
+.logo {
+  font-size: 14px;
+  font-weight: 700;
+  color: #e8f4ff;
+  white-space: nowrap;
+  letter-spacing: -0.03em;
+}
+.logo span { color: var(--fields); }
+
+.topic-filters {
+  display: flex;
+  gap: 5px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  flex: 1;
+}
+.topic-filters::-webkit-scrollbar { display: none; }
+
+.topic-btn {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 4px 9px;
+  border-radius: 4px;
+  border: 1.5px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  background: rgba(255,255,255,0.04);
+  color: rgba(180,200,230,0.6);
+  transition: all 0.15s;
+  letter-spacing: 0.01em;
+}
+.topic-btn:hover { color: #fff; background: rgba(255,255,255,0.08); }
+.topic-btn.active { color: #000 !important; font-weight: 700; border-color: transparent; }
+
+#search {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  padding: 7px 12px;
+  background: rgba(255,255,255,0.05);
+  border: 1.5px solid rgba(255,255,255,0.1);
+  border-radius: 5px;
+  color: #e0eaf8;
+  outline: none;
+  width: 170px;
+  transition: border-color 0.2s;
+}
+#search:focus { border-color: var(--fields); }
+#search::placeholder { color: rgba(180,200,230,0.3); }
+
+.clear-btn {
+  font-size: 11px;
+  padding: 6px 10px;
+  background: rgba(255,255,255,0.04);
+  border: 1.5px solid rgba(255,255,255,0.08);
+  color: rgba(180,200,230,0.45);
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+.clear-btn:hover { color: #e0eaf8; border-color: rgba(255,255,255,0.2); }
+
+/* ── SIDE PANEL ── */
+#panel {
+  position: fixed;
+  top: 54px; right: 0; bottom: 0;
+  width: 420px;
+  background: #080e1c;
+  border-left: 1px solid rgba(255,255,255,0.07);
+  z-index: 200;
+  transform: translateX(100%);
+  transition: transform 0.3s cubic-bezier(.4,0,.2,1);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+#panel.open { transform: translateX(0); }
+
+#panel-head {
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  flex-shrink: 0;
+  position: relative;
+}
+
+.ph-topic {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 3px;
+  border: 1px solid;
+  display: inline-block;
+  margin-bottom: 10px;
+}
+
+.ph-formula {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 28px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+  margin-bottom: 4px;
+}
+
+.ph-name {
+  font-size: 12px;
+  font-weight: 400;
+  color: rgba(180,200,230,0.5);
+}
+
+.ph-given {
+  display: inline-block;
+  margin-left: 8px;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 7px;
+  background: rgba(255,210,0,0.12);
+  color: #ffd700;
+  border: 1px solid rgba(255,210,0,0.25);
+  border-radius: 3px;
+  letter-spacing: 0.08em;
+  vertical-align: middle;
+}
+
+.close-btn {
+  position: absolute;
+  top: 14px; right: 14px;
+  width: 28px; height: 28px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  color: rgba(180,200,230,0.4);
+  border-radius: 5px;
+  font-size: 15px;
+  transition: all 0.15s;
+  border: 1px solid transparent;
+}
+.close-btn:hover { color: #fff; background: rgba(255,255,255,0.07); border-color: rgba(255,255,255,0.1); }
+
+#panel-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0;
+}
+#panel-scroll::-webkit-scrollbar { width: 3px; }
+#panel-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+
+/* Panel Sections */
+.psec {
+  padding: 14px 20px;
+  border-bottom: 1px solid rgba(255,255,255,0.045);
+}
+
+.psec-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(180,200,230,0.35);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.psec-label::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: rgba(255,255,255,0.05);
+}
+
+/* Variables table */
+.var-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.var-table tr { border-bottom: 1px solid rgba(255,255,255,0.04); }
+.var-table tr:last-child { border-bottom: none; }
+.var-table td {
+  padding: 5px 0;
+  vertical-align: top;
+  line-height: 1.5;
+}
+.var-sym {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 700;
+  min-width: 50px;
+  color: #fff;
+}
+.var-unit {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: rgba(180,200,230,0.4);
+  min-width: 56px;
+  padding-left: 8px;
+}
+.var-desc {
+  color: rgba(180,200,230,0.7);
+  font-size: 11.5px;
+  padding-left: 8px;
+}
+
+/* Worked example */
+.worked-step {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 9px;
+  align-items: flex-start;
+}
+.step-num {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.07);
+  color: rgba(180,200,230,0.6);
+  font-size: 9px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.step-text {
+  font-size: 12px;
+  color: rgba(180,200,230,0.82);
+  line-height: 1.6;
+}
+.step-math {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11.5px;
+  color: #fff;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 4px;
+  padding: 7px 10px;
+  margin-top: 4px;
+  display: block;
+  line-height: 1.7;
+}
+
+/* Memory tip */
+.tip-box {
+  background: rgba(255,215,0,0.06);
+  border: 1px solid rgba(255,215,0,0.15);
+  border-left: 3px solid #ffd700;
+  border-radius: 5px;
+  padding: 10px 12px;
+  font-size: 12px;
+  color: rgba(240,220,150,0.9);
+  line-height: 1.6;
+}
+
+/* Common mistakes */
+.mistake-item {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  margin-bottom: 8px;
+}
+.mistake-item:last-child { margin-bottom: 0; }
+.mistake-icon {
+  color: #ff6b6b;
+  font-size: 12px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.mistake-text {
+  font-size: 12px;
+  color: rgba(240,180,180,0.8);
+  line-height: 1.5;
+}
+
+/* Connections */
+.conn-item {
+  display: flex;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  cursor: pointer;
+  transition: background 0.12s;
+  border-radius: 4px;
+  padding: 7px 8px;
+  margin: 0 -8px;
+}
+.conn-item:hover { background: rgba(255,255,255,0.04); }
+.conn-item:last-child { border-bottom: none; }
+.conn-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; margin-top: 5px; }
+.conn-right { flex: 1; }
+.conn-f {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+.conn-why {
+  font-size: 10.5px;
+  color: rgba(180,200,230,0.42);
+  line-height: 1.4;
+}
+
+/* ── ZOOM CONTROLS ── */
+#zoom-controls {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 300;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.zoom-btn {
+  width: 36px; height: 36px;
+  background: rgba(13,21,38,0.95);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: rgba(180,200,230,0.7);
+  border-radius: 6px;
+  font-size: 16px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s;
+  font-family: 'JetBrains Mono', monospace;
+  backdrop-filter: blur(8px);
+}
+.zoom-btn:hover { color: #fff; border-color: rgba(255,255,255,0.3); background: rgba(20,33,58,0.98); }
+.zoom-btn.fit { font-size: 11px; font-weight: 700; letter-spacing: -0.02em; }
+
+/* ── HINT ── */
+#hint {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 10px;
+  font-family: 'JetBrains Mono', monospace;
+  color: rgba(180,200,230,0.22);
+  z-index: 50;
+  pointer-events: none;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+/* ── PAN CURSOR ON BACKGROUND ── */
+#pan-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  cursor: grab;
+}
+#pan-layer.panning { cursor: grabbing; }
+</style>
+</head>
+<body>
+
+<div id="pan-layer"></div>
+<canvas id="link-canvas"></canvas>
+<div id="node-layer"><div id="world"></div></div>
+
+<div id="topbar">
+  <div class="logo">AQA <span>Physics</span> · Equation Web</div>
+  <div class="topic-filters" id="topic-filters"></div>
+  <input type="search" id="search" placeholder="Search…" autocomplete="off">
+  <button class="clear-btn" id="clear-btn">✕ Reset</button>
+</div>
+
+<div id="panel">
+  <div id="panel-head">
+    <div class="ph-topic" id="ph-topic"></div>
+    <div class="ph-formula" id="ph-formula"></div>
+    <div class="ph-name" id="ph-name"></div>
+    <div class="close-btn" id="close-btn">✕</div>
+  </div>
+  <div id="panel-scroll"></div>
+</div>
+
+<div id="zoom-controls">
+  <button class="zoom-btn" id="btn-zoomin" title="Zoom in">+</button>
+  <button class="zoom-btn fit" id="btn-fit" title="Fit all">FIT</button>
+  <button class="zoom-btn" id="btn-zoomout" title="Zoom out">−</button>
+</div>
+
+<div id="hint">DRAG background to pan · SCROLL to zoom · CLICK any equation</div>
+
+<script>
+// ════════════════════════════════════════════════════════════════
+// DATA
+// ════════════════════════════════════════════════════════════════
+const TOPICS = {
+  mech:   { label:'Mechanics',       color:'#f0a500' },
+  waves:  { label:'Waves',           color:'#00d68f' },
+  parts:  { label:'Particles',       color:'#ff6b9d' },
+  elec:   { label:'Electricity',     color:'#9b8fff' },
+  shm:    { label:'SHM & Circular',  color:'#ffe57a' },
+  fields: { label:'Fields',          color:'#4dabf7' },
+  nuke:   { label:'Nuclear',         color:'#ffa94d' },
+  therm:  { label:'Thermal',         color:'#ff6b6b' },
+  astro:  { label:'Astrophysics',    color:'#38d9d9' },
+};
+
+const nodes = [
+// ── MECHANICS ──────────────────────────────────────────────────
+{ id:'suvat1', f:'v = u + at', name:'SUVAT: Velocity', topic:'mech', given:false,
+  vars:[['u','m/s','Initial velocity'],['v','m/s','Final velocity'],['a','m/s²','Acceleration'],['t','s','Time']],
+  tip:'Only valid under CONSTANT acceleration. In gravity questions, a = 9.81 m/s² downward (use −9.81 if upward positive).',
+  steps:['Identify: u=20 m/s, a=−4 m/s² (braking), find t when v=0.','Substitute: 0 = 20 + (−4)t','Solve: t = 20/4 = 5 s','Now use s = ½(u+v)t = ½×20×5 = 50 m stopping distance.'],
+  mistake:['Forgetting the minus sign when decelerating — a is NOT always 9.81.','Using this equation when acceleration varies (e.g. air resistance).'],
+  memory:'v = u + at → "V equals U plus AT" — velocity starts at u, increases by at.' },
+
+{ id:'suvat2', f:'s = ut + ½at²', name:'SUVAT: Displacement', topic:'mech', given:false,
+  vars:[['s','m','Displacement'],['u','m/s','Initial velocity'],['a','m/s²','Acceleration'],['t','s','Time']],
+  tip:'Use when you know time and want displacement. For free-fall from rest: s = ½gt² (u=0 drops out).',
+  steps:['Ball dropped from rest off 45 m cliff. u=0, a=9.81, s=45.','45 = 0 + ½(9.81)t²','t² = 45/4.905 = 9.17','t = √9.17 = 3.03 s'],
+  mistake:['Forgetting the ½ factor in ½at².','Using displacement instead of distance for non-straight paths.'],
+  memory:'Think: displacement = initial drift + extra due to acceleration. The ½ comes from averaging.' },
+
+{ id:'suvat3', f:'v² = u² + 2as', name:'SUVAT: No Time', topic:'mech', given:false,
+  vars:[['v','m/s','Final velocity'],['u','m/s','Initial velocity'],['a','m/s²','Acceleration'],['s','m','Displacement']],
+  tip:'Use this when the question gives NO time data. Perfect for "what speed does it hit the ground?" questions.',
+  steps:['Arrow launched at 30 m/s upward. At max height v=0.','0 = 30² + 2(−9.81)s','s = 900/(2×9.81) = 45.9 m','No stopwatch needed!'],
+  mistake:['Not spotting that time is absent — the giveaway to use this equation.','s is displacement not distance — matters for return journeys.'],
+  memory:'Derived by eliminating t between v=u+at and s=½(u+v)t. No time = no problem.' },
+
+{ id:'suvat4', f:'s = ½(u+v)t', name:'SUVAT: Average Velocity', topic:'mech', given:false,
+  vars:[['s','m','Displacement'],['u','m/s','Initial velocity'],['v','m/s','Final velocity'],['t','s','Time']],
+  tip:'Most elegant SUVAT — displacement = average velocity × time. Works when you know both u and v.',
+  steps:['Car: u=0, v=24 m/s, t=8 s.','s = ½(0+24)×8 = 96 m','Also the area under a v-t graph (trapezium).'],
+  mistake:['This ONLY works for uniform acceleration — average velocity is NOT always ½(u+v) otherwise.'],
+  memory:'Area of a trapezium = ½(sum of parallel sides) × height. That\'s all this is.' },
+
+{ id:'newton2', f:'F = ma', name:"Newton's 2nd Law", topic:'mech', given:false,
+  vars:[['F','N','Resultant (net) force'],['m','kg','Mass'],['a','m/s²','Acceleration']],
+  tip:'F is the RESULTANT force — subtract weight, friction, drag. If multiple forces act, resolve them first.',
+  steps:['Rocket: thrust=80 kN, weight=49 kN, m=5000 kg.','Net F = 80000−49000 = 31000 N upward.','a = F/m = 31000/5000 = 6.2 m/s²','Then use SUVAT to find velocity/displacement.'],
+  mistake:['Using total force not NET force — always subtract opposing forces.','Forgetting to convert grams to kg or kN to N.'],
+  memory:'F = ma → "Force Makes it Accelerate." Rearrange freely: a=F/m, m=F/a.' },
+
+{ id:'weight', f:'W = mg', name:'Weight', topic:'mech', given:false,
+  vars:[['W','N','Weight (force due to gravity)'],['m','kg','Mass'],['g','m/s²','Gravitational field strength (9.81 on Earth)']],
+  tip:'Weight is a FORCE (Newtons), not a mass. Mass is the same everywhere; weight depends on g of the planet.',
+  steps:['70 kg person on Earth: W = 70×9.81 = 686.7 N','On Moon (g=1.6): W = 70×1.6 = 112 N','On ISS: still has weight (gravity still acts!) — they are in free-fall, not weightless.'],
+  mistake:['Saying weight = mass. WRONG. Weight is in Newtons, mass in kg.','Using g=10 when question says use g=9.81 — costs marks.'],
+  memory:'g = 9.81 N/kg = 9.81 m/s². These are the SAME quantity with different units.' },
+
+{ id:'momentum', f:'p = mv', name:'Momentum', topic:'mech', given:false,
+  vars:[['p','kg m/s','Momentum (vector)'],['m','kg','Mass'],['v','m/s','Velocity (vector)']],
+  tip:'Momentum is ALWAYS conserved in collisions (closed system). It is a VECTOR — direction matters.',
+  steps:['Cricket ball 0.16 kg at 40 m/s: p = 6.4 kg m/s','After catch (v=0): Δp = 6.4 kg m/s','F = Δp/Δt: spread over 0.5 s → F = 12.8 N. Soft hands!'],
+  mistake:['Ignoring direction in collisions — set up a positive direction first.','Confusing momentum with kinetic energy — very different quantities.'],
+  memory:'p for momentum (from Latin "petere" — to rush). Always: total p before = total p after.' },
+
+{ id:'impulse', f:'FΔt = Δp', name:'Impulse', topic:'mech', given:true,
+  vars:[['F','N','Force'],['Δt','s','Contact time'],['Δp','kg m/s','Change in momentum']],
+  tip:'Impulse = area under a Force–time graph. Same Δp can be achieved with large F for short time, or small F for long time.',
+  steps:['Ball hits wall: m=0.4 kg, u=15 m/s, bounces at 12 m/s.','Δp = m(v−u) = 0.4(−12−15) = −10.8 kg m/s','Contact time=0.008 s: F = 10.8/0.008 = 1350 N','Airbag 0.1 s: F = 10.8/0.1 = 108 N — 12.5× less!'],
+  mistake:['Sign error: if ball reverses direction, Δp = m(−v−u) — both speeds contribute.','Using speed instead of velocity — direction changes MUST be included.'],
+  memory:'Impulse = FΔt = Δ(mv). More time → less force for same change. That is why crumple zones save lives.' },
+
+{ id:'ke', f:'Eₖ = ½mv²', name:'Kinetic Energy', topic:'mech', given:false,
+  vars:[['Eₖ','J','Kinetic energy'],['m','kg','Mass'],['v','m/s','Speed']],
+  tip:'KE ∝ v² — doubling speed QUADRUPLES kinetic energy! This is why stopping distances increase so rapidly with speed.',
+  steps:['1200 kg car at 30 m/s: Eₖ = ½×1200×900 = 540 000 J','Same car at 60 m/s: Eₖ = 2 160 000 J','4× the energy — takes 4× the stopping distance.'],
+  mistake:['Forgetting the ½ factor.','Using velocity squared: v² not v in the formula.'],
+  memory:'½mv². The ½ comes from integrating F=ma over displacement. Quadruples with double speed.' },
+
+{ id:'gpe', f:'Eₚ = mgh', name:'Gravitational PE', topic:'mech', given:false,
+  vars:[['Eₚ','J','Gravitational potential energy'],['m','kg','Mass'],['g','m/s²','9.81 m/s²'],['h','m','Height above reference']],
+  tip:'h is measured from a reference point of your choice. In energy conservation questions, set ground as h=0.',
+  steps:['Rollercoaster car 500 kg drops 40 m.','Eₚ lost = 500×9.81×40 = 196 200 J','All → Eₖ: ½mv² = 196 200','v = √(2×196200/500) = 28.0 m/s at bottom.'],
+  mistake:['Forgetting to use the CHANGE in height, not total height.','Not equating Eₚ to Eₖ — energy conservation is the key step.'],
+  memory:'mgh. Say it: "em-gee-aitch." Energy = mass × g × height. Simple, but appears in almost every A-level mechanics question.' },
+
+{ id:'work', f:'W = Fs cosθ', name:'Work Done', topic:'mech', given:false,
+  vars:[['W','J','Work done / energy transferred'],['F','N','Applied force'],['s','m','Displacement in direction of motion'],['θ','°','Angle between F and displacement']],
+  tip:'Only the component of force ALONG the displacement does work. If F ⊥ displacement, W = 0 (e.g. circular motion, normal force).',
+  steps:['Rope at 35° to horizontal, F=40 N, pulled 5 m.','W = 40×5×cos35° = 200×0.819 = 163.8 J','Vertical component 40sin35°=22.9 N does zero work.'],
+  mistake:['Using the wrong angle — θ is between force and displacement, not with the vertical.','Forgetting cosθ when force is at an angle.'],
+  memory:'W = Fs when parallel. Add cosθ when not. Area under F-s graph = work done.' },
+
+{ id:'power', f:'P = Fv', name:'Power', topic:'mech', given:false,
+  vars:[['P','W','Power'],['F','N','Driving force'],['v','m/s','Velocity'],['P','W','Also P = W/t']],
+  tip:'P = Fv is instantaneous power. P = W/t is average power. At terminal velocity: driving force = drag force.',
+  steps:['Car engine power 60 kW, v=30 m/s.','F = P/v = 60000/30 = 2000 N driving force','At v=40 m/s same power: F = 1500 N — less force, higher speed.','This means less acceleration available at high speed.'],
+  mistake:['Forgetting P = W/t and P = Fv are both valid — choose based on given data.','Not recognising terminal velocity means P = drag × v.'],
+  memory:'P = W/t = (Fs)/t = F(s/t) = Fv. Just rearranging.' },
+
+{ id:'hookeslaw', f:'F = kx', name:"Hooke's Law", topic:'mech', given:false,
+  vars:[['F','N','Force applied'],['k','N/m','Spring constant (stiffness)'],['x','m','Extension from natural length']],
+  tip:'Only valid up to the ELASTIC LIMIT. k = gradient of a F–x graph. Stiffer spring = larger k = less extension for same force.',
+  steps:['Spring k=50 N/m, 300 g mass hung: F=0.3×9.81=2.94 N','x = F/k = 2.94/50 = 0.059 m = 5.9 cm','Same spring: 2× mass → 2× extension (linear!).'],
+  mistake:['Using Hooke\'s Law beyond the elastic limit — it becomes invalid and you\'ll get wrong answers.','Confusing k (N/m) with E (Pa) — different quantities.'],
+  memory:'k = stiffness. High k = hard spring (needs more force per metre stretched). Steel > rubber.' },
+
+{ id:'epe', f:'E = ½kx²', name:'Elastic PE', topic:'mech', given:false,
+  vars:[['E','J','Elastic potential energy stored'],['k','N/m','Spring constant'],['x','m','Extension']],
+  tip:'This is the AREA under the F–x graph (triangle = ½ × base × height = ½Fx = ½kx²).',
+  steps:['Catapult: k=200 N/m, pulled back x=0.15 m.','E = ½×200×0.0225 = 2.25 J stored','Launched mass 0.05 kg: ½mv² = 2.25 J','v = √(2×2.25/0.05) = 9.49 m/s'],
+  mistake:['Using E = kx (no ½, no square) — very common error.','Forgetting x is extension, not total length.'],
+  memory:'Area of triangle = ½ base × height. F vs x graph: ½ × x × (kx) = ½kx².' },
+
+{ id:'youngmod', f:'E = σ/ε', name:"Young's Modulus", topic:'mech', given:true,
+  vars:[['E','Pa','Young\'s modulus (material property)'],['σ','Pa','Tensile stress = F/A'],['ε','—','Tensile strain = ΔL/L (no units)']],
+  tip:'E is a property of the MATERIAL, not the object. Steel always has E ≈ 200 GPa regardless of shape.',
+  steps:['Steel wire: L=2 m, A=0.5 mm²=5×10⁻⁷ m², F=100 N.','σ = F/A = 100/5×10⁻⁷ = 2×10⁸ Pa','ε = σ/E = 2×10⁸/2×10¹¹ = 0.001','ΔL = εL = 0.001×2 = 0.002 m = 2 mm'],
+  mistake:['Mixing up stress (F/A) and strain (ΔL/L) — stress has units (Pa), strain does not.','Using cross-sectional area instead of area — you need π r² for a wire.'],
+  memory:'Young\'s modulus = stress/strain. Gradient of the initial (linear) section of a stress–strain graph.' },
+
+// ── WAVES ────────────────────────────────────────────────────────
+{ id:'wavespeed', f:'v = fλ', name:'Wave Speed', topic:'waves', given:false,
+  vars:[['v','m/s','Wave speed'],['f','Hz','Frequency'],['λ','m','Wavelength']],
+  tip:'For EM waves in vacuum: v = c = 3×10⁸ m/s. When entering a denser medium, v decreases and λ decreases — but f stays CONSTANT.',
+  steps:['FM radio station at 100 MHz.','λ = v/f = 3×10⁸/10⁸ = 3 m','Visible green light 550 nm: f = 3×10⁸/550×10⁻⁹ = 5.45×10¹⁴ Hz','In glass (v=2×10⁸ m/s): λ = 2×10⁸/5.45×10¹⁴ = 367 nm'],
+  mistake:['Thinking frequency changes when light enters glass — it NEVER does. Only λ and v change.','Confusing wavelength (m) with frequency (Hz).'],
+  memory:'v = fλ → speed = frequency × wavelength. A transverse wave analogy: more oscillations per second (f↑) with shorter steps (λ↓) keeps same speed.' },
+
+{ id:'snell', f:'n₁sinθ₁ = n₂sinθ₂', name:"Snell's Law", topic:'waves', given:true,
+  vars:[['n₁','—','Refractive index of medium 1'],['θ₁','°','Angle of incidence (from normal)'],['n₂','—','Refractive index of medium 2'],['θ₂','°','Angle of refraction (from normal)']],
+  tip:'Angles are ALWAYS measured from the NORMAL (perpendicular to surface), never from the surface itself.',
+  steps:['Air (n=1) to glass (n=1.5), incident at 40°.','1×sin40° = 1.5×sinθ₂','sinθ₂ = 0.643/1.5 = 0.428 → θ₂ = 25.4°','Bends toward normal when going into denser medium. ✓'],
+  mistake:['Measuring angles from the surface not the normal — automatic zero in an exam.','Forgetting to take arcsin at the end.'],
+  memory:'n₁sinθ₁ = n₂sinθ₂. Bigger n = smaller angle. More dense = bends toward normal.' },
+
+{ id:'refindex', f:'n = c/v', name:'Refractive Index', topic:'waves', given:false,
+  vars:[['n','—','Refractive index (≥1)'],['c','m/s','Speed of light in vacuum (3×10⁸ m/s)'],['v','m/s','Speed of light in the medium']],
+  tip:'n is always ≥ 1. Vacuum n=1. Water n≈1.33. Glass n≈1.5. Diamond n=2.42. Higher n = slower, shorter wavelength.',
+  steps:['Diamond: n=2.42. v = c/n = 3×10⁸/2.42 = 1.24×10⁸ m/s','Critical angle: sinθc = 1/n = 1/2.42 → θc = 24.4°','Any light hitting the surface at >24.4° totally internally reflects.','That is why diamonds sparkle — extreme TIR.'],
+  mistake:['Writing n < 1 — physically impossible (nothing travels faster than c in vacuum).'],
+  memory:'n = c/v. Think: n = "Normal speed (c) ÷ actual speed in medium". Always ≥ 1.' },
+
+{ id:'critangle', f:'sin θc = 1/n', name:'Critical Angle', topic:'waves', given:true,
+  vars:[['θc','°','Critical angle'],['n','—','Refractive index of the denser medium']],
+  tip:'TIR only occurs going from a DENSER medium into a LESS DENSE medium AND angle > θc.',
+  steps:['Optical fibre glass, n=1.5: sinθc = 1/1.5 = 0.667 → θc = 41.8°','Any ray striking the glass-air boundary at >41.8° reflects.','Rays can travel km with zero light leakage!','If n=1.5 → θc=41.8°. Diamond n=2.42 → θc=24.4° — much easier to TIR.'],
+  mistake:['Applying TIR to air-to-glass — wrong way around, it won\'t happen.','Forgetting to take arcsin.'],
+  memory:'sinθc = 1/n. Derived from Snell\'s law when θ₂ = 90° (refracted ray grazes surface).' },
+
+{ id:'diffgrat', f:'d sinθ = nλ', name:'Diffraction Grating', topic:'waves', given:true,
+  vars:[['d','m','Slit spacing = 1/(lines per metre)'],['θ','°','Angle of diffraction maximum'],['n','—','Order number (0, 1, 2, ...)'],['λ','m','Wavelength']],
+  tip:'If grating says 500 lines/mm → d = 1/500000 = 2×10⁻⁶ m. Max order when sinθ ≤ 1.',
+  steps:['Grating 500 lines/mm (d=2×10⁻⁶ m), green laser λ=532 nm.','n=1: sinθ = 532×10⁻⁹/2×10⁻⁶ = 0.266 → θ = 15.4°','n=2: sinθ = 0.532 → θ = 32.1°','n=3: sinθ = 0.798 → θ = 52.9°. n=4: sinθ = 1.064 > 1 — impossible, max order = 3!'],
+  mistake:['Forgetting to check maximum order (sinθ cannot exceed 1).','Confusing d (slit spacing) with number of slits.'],
+  memory:'d sinθ = nλ. More slits per mm → smaller d → larger θ for same wavelength.' },
+
+{ id:'youngsslit', f:'w = λD/s', name:"Young's Double Slit", topic:'waves', given:true,
+  vars:[['w','m','Fringe spacing'],['λ','m','Wavelength'],['D','m','Distance from slits to screen'],['s','m','Slit separation']],
+  tip:'Measure many fringes and divide for accuracy. Larger D or smaller s = wider fringes = easier to measure λ.',
+  steps:['λ=589 nm (sodium yellow), s=0.5 mm, D=1.5 m.','w = 589×10⁻⁹×1.5/5×10⁻⁴ = 1.77×10⁻³ m = 1.77 mm','So measure 10 fringes = 17.7 mm → λ = ws/D','Rearrange to find λ: λ = ws/D = 17.7×10⁻³×5×10⁻⁴/1.5 = 590 nm ✓'],
+  mistake:['Confusing s (slit separation) with w (fringe spacing).','Not converting nm to m (×10⁻⁹).'],
+  memory:'Wider fringes with: larger λ, larger D, smaller s. Think: stretch out the screen, squish the slits.' },
+
+// ── PARTICLES ────────────────────────────────────────────────────
+{ id:'photon', f:'E = hf', name:'Photon Energy', topic:'parts', given:true,
+  vars:[['E','J','Photon energy'],['h','J s','Planck\'s constant = 6.63×10⁻³⁴ J s'],['f','Hz','Frequency of light']],
+  tip:'Also E = hc/λ. Convert to eV by dividing by 1.6×10⁻¹⁹. UV photons have MORE energy than visible.',
+  steps:['UV: f=1.5×10¹⁵ Hz → E = 6.63×10⁻³⁴×1.5×10¹⁵ = 9.95×10⁻¹⁹ J = 6.2 eV','Green: λ=550 nm → E = hc/λ = 6.63×10⁻³⁴×3×10⁸/550×10⁻⁹ = 3.62×10⁻¹⁹ J = 2.26 eV','Zinc work function φ=4.3 eV → green light CANNOT cause photoelectric effect!'],
+  mistake:['Forgetting to convert J to eV or vice versa (÷1.6×10⁻¹⁹).','Confusing f (Hz) with ω (rad/s) — use f here.'],
+  memory:'E = hf. Higher frequency = higher energy. UV burns skin, radio waves do not — same reason.' },
+
+{ id:'photoelec', f:'hf = φ + Eₖ', name:'Photoelectric Effect', topic:'parts', given:true,
+  vars:[['hf','J','Incoming photon energy'],['φ','J','Work function (minimum energy to release electron)'],['Eₖ','J','Maximum kinetic energy of emitted electron']],
+  tip:'Threshold frequency: f₀ = φ/h. Below f₀, NO electrons emitted EVER no matter how bright. Intensity affects NUMBER of electrons only.',
+  steps:['Zinc: φ=6.9×10⁻¹⁹ J, f=2×10¹⁵ Hz.','hf = 6.63×10⁻³⁴×2×10¹⁵ = 1.33×10⁻¹⁸ J','Eₖ = hf − φ = 1.33×10⁻¹⁸ − 6.9×10⁻¹⁹ = 6.4×10⁻¹⁹ J = 4.0 eV','10× brighter light → 10× more electrons at the SAME Eₖ.'],
+  mistake:['Thinking brighter light gives faster electrons — it does NOT, only more electrons.','Forgetting φ must be exceeded for ANY emission to occur.'],
+  memory:'Photon energy = energy to escape (φ) + leftover KE. Like paying entry fee (φ) then having spending money.' },
+
+{ id:'debroglie', f:'λ = h/mv', name:'de Broglie Wavelength', topic:'parts', given:true,
+  vars:[['λ','m','de Broglie wavelength'],['h','J s','Planck\'s constant = 6.63×10⁻³⁴ J s'],['m','kg','Mass of particle'],['v','m/s','Speed of particle']],
+  tip:'Significant ONLY for tiny masses. Explains why electrons can diffract through crystals. For a human, λ is unmeasurably small.',
+  steps:['Electron m=9.11×10⁻³¹ kg at v=10⁶ m/s:','λ = 6.63×10⁻³⁴/(9.11×10⁻³¹×10⁶) = 7.28×10⁻¹⁰ m ≈ 0.73 nm','Atomic spacing ~0.3 nm → comparable! Electron diffraction is observable.','70 kg human at 2 m/s: λ = 6.63×10⁻³⁴/(70×2) = 4.7×10⁻³⁶ m — immeasurable.'],
+  mistake:['Using mv = p wrong — remember momentum p = mv.','Forgetting to use Planck\'s constant in J·s (not eV·s).'],
+  memory:'λ = h/p. More momentum (faster/heavier) = shorter wavelength. Wave-particle duality.' },
+
+{ id:'eelevel', f:'hf = E₁ − E₂', name:'Energy Level Transition', topic:'parts', given:false,
+  vars:[['hf','J','Photon energy emitted or absorbed'],['E₁','J','Higher energy level'],['E₂','J','Lower energy level']],
+  tip:'Emission: electron drops from E₁ to E₂, photon emitted. Absorption: photon absorbed, electron jumps up. Levels are given in eV (convert: ×1.6×10⁻¹⁹).',
+  steps:['Hydrogen: E(n=3)=−1.51 eV, E(n=2)=−3.40 eV','ΔE = −1.51 − (−3.40) = 1.89 eV = 3.03×10⁻¹⁹ J','f = ΔE/h = 3.03×10⁻¹⁹/6.63×10⁻³⁴ = 4.57×10¹⁴ Hz','λ = c/f = 3×10⁸/4.57×10¹⁴ = 656 nm (red Hα line!)'],
+  mistake:['Using energies in eV without converting to Joules before using E = hf.','Confusing emission and absorption spectra.'],
+  memory:'Energy levels like rungs on a ladder. Photon energy = gap between rungs. Bigger gap = higher frequency.' },
+
+// ── ELECTRICITY ──────────────────────────────────────────────────
+{ id:'charge', f:'Q = It', name:'Charge Flow', topic:'elec', given:false,
+  vars:[['Q','C (Coulombs)','Charge'],['I','A (Amperes)','Current'],['t','s','Time']],
+  tip:'1 Coulomb = 6.25×10¹⁸ electrons. A 1A current = 1 Coulomb per second flowing past a point.',
+  steps:['USB charger: 2 A for 1 hour.','Q = 2×3600 = 7200 C','Energy: W = QV = 7200×5 = 36 000 J = 10 Wh','This is your phone battery charging!'],
+  mistake:['Using minutes instead of seconds — always convert to seconds first.'],
+  memory:'Q = It. Charge = Current × Time. Think: current is the rate, charge is the total.' },
+
+{ id:'drift', f:'I = nqvA', name:'Drift Velocity', topic:'elec', given:true,
+  vars:[['I','A','Current'],['n','m⁻³','Charge carrier number density'],['q','C','Charge per carrier (1.6×10⁻¹⁹ for electrons)'],['v','m/s','Drift velocity'],['A','m²','Cross-sectional area']],
+  tip:'Electrons drift VERY slowly (~0.1 mm/s!) but current flows instantly — like water in a full pipe.',
+  steps:['Copper: n=8.5×10²⁸ /m³, A=1 mm²=10⁻⁶ m², I=1 A.','v = I/nqA = 1/(8.5×10²⁸×1.6×10⁻¹⁹×10⁻⁶)','v = 7.4×10⁻⁵ m/s = 0.07 mm/s','Yet the light turns on instantly — signal travels at c, not electrons!'],
+  mistake:['Thinking electrons zip around at light speed — they crawl!','Forgetting to convert mm² to m² (×10⁻⁶).'],
+  memory:'I = nqvA. n↑ (more carriers) → I↑. A↑ (thicker wire) → I↑ for same drift speed.' },
+
+{ id:'ohm', f:'V = IR', name:"Ohm's Law", topic:'elec', given:false,
+  vars:[['V','V (Volts)','Potential difference'],['I','A','Current'],['R','Ω (Ohms)','Resistance']],
+  tip:'Ohmic conductors have LINEAR V–I graphs. Non-ohmic (bulbs, diodes, thermistors) have curved V–I graphs.',
+  steps:['12 V battery, bulb R=60 Ω: I = V/R = 12/60 = 0.2 A','Two identical bulbs in series: R=120 Ω, I = 0.1 A (dimmer!).','Two in parallel: R=30 Ω, I = 0.4 A total (brighter!).'],
+  mistake:['Using resistance values at WRONG temperature — bulb resistance increases when hot.','Forgetting V is potential DIFFERENCE across the component, not absolute potential.'],
+  memory:'V=IR. "Very Important Relation." Voltage across = current through × resistance.' },
+
+{ id:'elecpow', f:'P = VI = I²R', name:'Electrical Power', topic:'elec', given:false,
+  vars:[['P','W','Power'],['V','V','Potential difference'],['I','A','Current'],['R','Ω','Resistance']],
+  tip:'P = I²R is KEY for power lines: step up voltage (V↑) → current down (I↓) → I²R loss drastically reduced.',
+  steps:['Kettle: P=3 kW, V=230 V. I = P/V = 13 A','Heat loss in 1 Ω cable: P = I²R = 13²×1 = 169 W wasted!','Step voltage up to 11 kV: I = 3000/11000 = 0.27 A','Cable loss: 0.27²×1 = 0.07 W — 2400× less heat loss!'],
+  mistake:['Using P = V²/R when you should use P = I²R (different situations give different forms).','Not squaring current in I²R.'],
+  memory:'Three forms: P=VI, P=V²/R, P=I²R. Derive any two from V=IR. National Grid exploits I²R — high V, low I.' },
+
+{ id:'resistivity', f:'R = ρL/A', name:'Resistivity', topic:'elec', given:true,
+  vars:[['R','Ω','Resistance'],['ρ','Ω m','Resistivity (material property)'],['L','m','Length of wire'],['A','m²','Cross-sectional area']],
+  tip:'ρ is a MATERIAL property (like E in Young\'s modulus). Longer wire → more R. Thicker wire → less R.',
+  steps:['Nichrome ρ=1.1×10⁻⁶ Ω m, L=1.0 m, diameter 0.56 mm.','A = π(0.28×10⁻³)² = 2.46×10⁻⁷ m²','R = 1.1×10⁻⁶×1.0/2.46×10⁻⁷ = 4.47 Ω','Double the length → 8.94 Ω. Halve the diameter → A÷4 → R×4.'],
+  mistake:['Using diameter instead of radius in A = πr²!  r = d/2.','Forgetting ρ depends on temperature — this is the resistivity at a stated temperature.'],
+  memory:'R = ρL/A. Resistance ∝ length, ∝ 1/area. Think: long thin wire has high resistance.' },
+
+{ id:'emfint', f:'ε = I(R + r)', name:'EMF & Internal Resistance', topic:'elec', given:true,
+  vars:[['ε','V','EMF (total voltage supplied by source)'],['I','A','Current'],['R','Ω','External resistance'],['r','Ω','Internal resistance of battery']],
+  tip:'"Lost volts" = Ir. Terminal voltage = ε − Ir. Plot V vs I → y-intercept = ε, gradient = −r.',
+  steps:['Battery: ε=6 V, r=0.5 Ω, external R=5.5 Ω.','I = ε/(R+r) = 6/6.0 = 1.0 A','Terminal V = ε−Ir = 6−(1×0.5) = 5.5 V','Short circuit (R→0): I = 6/0.5 = 12 A — very dangerous!'],
+  mistake:['Forgetting internal resistance — using V=ε when V = ε−Ir (they differ under load).','Plotting graph wrong way — gradient = −r (negative).'],
+  memory:'EMF is total energy per coulomb. Internal resistance "steals" some as heat inside the cell.' },
+
+{ id:'capacitance', f:'C = Q/V', name:'Capacitance', topic:'elec', given:true,
+  vars:[['C','F (Farads)','Capacitance'],['Q','C','Charge stored'],['V','V','Potential difference across capacitor']],
+  tip:'1 Farad is enormous — practical caps are μF (10⁻⁶) or nF (10⁻⁹). Gradient of Q–V graph = C.',
+  steps:['100 μF cap charged to 12 V:','Q = CV = 100×10⁻⁶×12 = 1.2×10⁻³ C = 1.2 mC','Energy: E = ½CV² = ½×100×10⁻⁶×144 = 7.2 mJ','Discharge through 100 kΩ: τ = RC = 10⁵×10⁻⁴ = 10 s'],
+  mistake:['Confusing the gradient of Q–V (=C) with the area (=energy).','Not converting μF to F when calculating.'],
+  memory:'C = Q/V. Bigger capacitor → more charge for same voltage. Capacitors store charge, not current.' },
+
+{ id:'capenergy', f:'E = ½CV²', name:'Energy in Capacitor', topic:'elec', given:true,
+  vars:[['E','J','Stored energy'],['C','F','Capacitance'],['V','V','Voltage across capacitor'],['Q','C','Charge (also: E = ½QV = Q²/2C)']],
+  tip:'Energy ∝ V² — doubling voltage stores 4× the energy! Camera flashes exploit this.',
+  steps:['Camera flash: C=400 μF, V=300 V.','E = ½×400×10⁻⁶×300² = ½×400×10⁻⁶×90000 = 18 J','Released in 1 ms: P = 18/0.001 = 18 000 W peak!','That is why the flash is so bright despite tiny battery.'],
+  mistake:['Forgetting the ½ factor.','Using charge Q instead of voltage V — unless using E = Q²/2C form.'],
+  memory:'½CV². Same structure as ½mv² (kinetic energy) and ½kx² (spring energy) — all have a ½.' },
+
+{ id:'capdischarge', f:'Q = Q₀e^(−t/RC)', name:'Capacitor Discharge', topic:'elec', given:true,
+  vars:[['Q','C','Charge at time t'],['Q₀','C','Initial charge'],['t','s','Time'],['R','Ω','Resistance'],['C','F','Capacitance']],
+  tip:'Time constant τ = RC: time for Q to fall to Q₀/e ≈ 37%. After 5τ, Q < 1% — effectively discharged.',
+  steps:['C=470 μF, R=2 kΩ: τ = 2000×470×10⁻⁶ = 0.94 s','After t=τ: Q = Q₀×e⁻¹ = 0.368Q₀ (37% remaining)','After 5τ=4.7 s: Q = Q₀×e⁻⁵ = 0.0067Q₀ (<1%)','ln(Q/Q₀) = −t/RC: use this to find t for any fraction.'],
+  mistake:['Not recognising the exponential form — must use ln to solve for t.','Mixing up τ = RC (not R+C, not R/C).'],
+  memory:'Same equation as radioactive decay N=N₀e^(−λt). Time constant τ = 1/λ. Same maths, different physics.' },
+
+// ── SHM & CIRCULAR ───────────────────────────────────────────────
+{ id:'angvel', f:'ω = 2πf', name:'Angular Velocity', topic:'shm', given:true,
+  vars:[['ω','rad/s','Angular velocity (omega)'],['f','Hz','Frequency'],['T','s','Period: also ω = 2π/T']],
+  tip:'ω connects all the circular and SHM equations. Always find ω first in SHM problems.',
+  steps:['Pendulum f=0.5 Hz: ω = 2π×0.5 = π = 3.14 rad/s','Mass-spring: k=50 N/m, m=0.2 kg → ω = √(k/m) = √250 = 15.8 rad/s','Then: vₘₐₓ = Aω, a = −ω²x, T = 2π/ω — all use ω!'],
+  mistake:['Confusing f (Hz) with ω (rad/s) — they differ by factor 2π.','Using T in seconds without converting: f = 1/T first.'],
+  memory:'ω = 2πf. One complete oscillation = 2π radians. So angular speed = 2π × frequency.' },
+
+{ id:'centaccel', f:'a = v²/r = ω²r', name:'Centripetal Acceleration', topic:'shm', given:true,
+  vars:[['a','m/s²','Centripetal acceleration (toward centre)'],['v','m/s','Linear speed'],['r','m','Radius'],['ω','rad/s','Angular velocity']],
+  tip:'Centripetal acceleration is ALWAYS directed toward the centre. The direction changes, but magnitude a = v²/r is constant for constant speed.',
+  steps:['Car cornering at v=20 m/s, r=50 m.','a = v²/r = 400/50 = 8 m/s² inward.','Feel: 8/9.81 = 0.82g — roughly what you feel cornering in a car.','Required friction: F = ma = 1200×8 = 9600 N'],
+  mistake:['Thinking centripetal means "centrifugal" — there is no outward force! Objects want to go straight (inertia).','Not recognising the two forms: a=v²/r and a=ω²r.'],
+  memory:'Centripetal = "seeking the centre." Always inward. The bigger v, the tighter the required circle.' },
+
+{ id:'centforce', f:'F = mv²/r', name:'Centripetal Force', topic:'shm', given:true,
+  vars:[['F','N','Centripetal force (resultant inward force)'],['m','kg','Mass'],['v','m/s','Speed'],['r','m','Radius']],
+  tip:'Centripetal force is NOT a new force — it IS the label for whatever force acts inward: tension, gravity, friction, normal force.',
+  steps:['Ball on string r=0.8 m, m=0.5 kg, v=4 m/s.','F = 0.5×16/0.8 = 10 N (supplied by string tension)','Double speed → F quadruples → string snaps!','Planet in orbit: gravity IS the centripetal force → GM/r² = v²/r'],
+  mistake:['Drawing centripetal force as a separate force on a free body diagram — it is an EXISTING force labelled centripetal.'],
+  memory:'F = mv²/r. Same as Newton 2: F = ma with a = v²/r. Always toward centre.' },
+
+{ id:'shmaccel', f:'a = −ω²x', name:'SHM Acceleration', topic:'shm', given:true,
+  vars:[['a','m/s²','Acceleration (restoring)'],['ω','rad/s','Angular frequency'],['x','m','Displacement from equilibrium']],
+  tip:'This is the DEFINING equation of SHM. The minus sign means acceleration is always opposite to displacement — it restores to equilibrium.',
+  steps:['Spring SHM: k=80 N/m, m=0.2 kg → ω² = k/m = 400 → ω = 20 rad/s','At x=0.05 m: a = −400×0.05 = −20 m/s² (restoring)','At x=0: a=0, speed is maximum.','At x=±A: a=∓ω²A, speed is zero.'],
+  mistake:['Forgetting the minus sign — acceleration is RESTORING (opposite to displacement).','Confusing ω² in SHM with the angular velocity of circular motion — they are the same ω.'],
+  memory:'a ∝ −x. Hooke\'s law F = −kx gives a = −(k/m)x, so ω² = k/m. SHM is just oscillating springs.' },
+
+{ id:'shmdisp', f:'x = A cos(ωt)', name:'SHM Displacement', topic:'shm', given:true,
+  vars:[['x','m','Displacement at time t'],['A','m','Amplitude (maximum displacement)'],['ω','rad/s','Angular frequency'],['t','s','Time']],
+  tip:'Use cos if starting at maximum displacement (t=0, x=A). Use sin if starting at equilibrium (t=0, x=0).',
+  steps:['Pendulum: A=0.06 m, f=0.5 Hz → ω=π rad/s.','At t=0: x = 0.06cos(0) = 0.06 m ✓ (at max)','At t=1 s: x = 0.06cos(π) = −0.06 m (opposite extreme)','At t=0.5 s: x = 0.06cos(π/2) = 0 m (at equilibrium, max speed)'],
+  mistake:['Using degrees instead of radians in cos(ωt) — must be radians.','Choosing sin vs cos wrong — check the initial conditions.'],
+  memory:'Differentiate x=Acos(ωt) → v=−Aω sin(ωt) → a=−Aω²cos(ωt) = −ω²x. Full chain.' },
+
+{ id:'shmvmax', f:'vₘₐₓ = Aω', name:'SHM Max Speed', topic:'shm', given:false,
+  vars:[['vₘₐₓ','m/s','Maximum speed (at equilibrium, x=0)'],['A','m','Amplitude'],['ω','rad/s','Angular frequency'],['v','m/s','Also: v = ω√(A²−x²) at any x']],
+  tip:'Maximum speed occurs at equilibrium (x=0) where all PE has converted to KE. At x=±A, speed is zero.',
+  steps:['Spring: k=80 N/m, m=0.2 kg, A=0.05 m.','ω = √(k/m) = √400 = 20 rad/s','vₘₐₓ = Aω = 0.05×20 = 1.0 m/s','Check: ½kA² = ½mv²max → ½×80×0.0025 = ½×0.2×1.0 ✓'],
+  mistake:['Confusing vmax (at x=0) with speed at x=A (which is zero).','Using f instead of ω — remember vmax = A×2πf.'],
+  memory:'vmax = Aω. Max speed at equilibrium, zero speed at amplitude. Like a pendulum: fastest at the bottom.' },
+
+{ id:'pendulum', f:'T = 2π√(l/g)', name:'Pendulum Period', topic:'shm', given:true,
+  vars:[['T','s','Period of oscillation'],['l','m','Length of pendulum (pivot to centre of mass)'],['g','m/s²','Gravitational field strength']],
+  tip:'Independent of mass and amplitude (for small angles <10°). Plot T² vs l — gradient = 4π²/g to find g.',
+  steps:['l=1.0 m on Earth: T = 2π√(1.0/9.81) = 2.007 s','l=0.25 m: T = 2π√(0.25/9.81) = 1.003 s — halve T, need l/4!','On Moon g=1.6 m/s²: T = 2π√(1.0/1.6) = 4.97 s — slower.','To find g: g = 4π²l/T²'],
+  mistake:['l is to the CENTRE OF MASS of the bob, not the top of the string.','Forgetting T ∝ √l — to double T, need to quadruple l.'],
+  memory:'T = 2π√(l/g). Same structure as mass-spring but with l/g instead of m/k.' },
+
+{ id:'massspring', f:'T = 2π√(m/k)', name:'Mass-Spring Period', topic:'shm', given:true,
+  vars:[['T','s','Period'],['m','kg','Oscillating mass'],['k','N/m','Spring constant']],
+  tip:'Independent of amplitude. Works in ANY orientation including weightlessness. Used on ISS to measure astronaut mass.',
+  steps:['m=0.3 kg, k=120 N/m: T = 2π√(0.3/120) = 2π√0.0025 = 2π×0.05 = 0.314 s','Stiffer spring (k=480 N/m): T = 2π√(0.3/480) = 0.157 s — twice as fast.','Double mass: T = 2π√(0.6/120) = 0.444 s','Compare with pendulum: period changes differently with l vs m.'],
+  mistake:['T∝√m not T∝m — doubling mass multiplies T by √2 only.','Using weight (mg) instead of mass (m).'],
+  memory:'T = 2π√(m/k). Heavy mass: slow. Stiff spring: fast. Both make intuitive sense.' },
+
+// ── FIELDS ───────────────────────────────────────────────────────
+{ id:'gravnewton', f:'F = GMm/r²', name:"Newton's Gravitation", topic:'fields', given:true,
+  vars:[['F','N','Gravitational force (attractive)'],['G','N m² kg⁻²','Gravitational constant = 6.67×10⁻¹¹'],['M,m','kg','Masses of the two objects'],['r','m','Centre-to-centre separation']],
+  tip:'Inverse square law — double distance = quarter force. Provides centripetal force for all orbital motion.',
+  steps:['ISS at r=6.77×10⁶ m (400 km altitude).','g = GM/r² = 6.67×10⁻¹¹×6×10²⁴/(6.77×10⁶)² = 8.69 m/s²','Note: g is NOT zero on the ISS — it is 8.69 m/s²!','Astronauts float because they are in free-fall, not because g = 0.'],
+  mistake:['Using r from surface not from CENTRE of Earth.','Thinking g=0 in orbit — it is still ~8.7 m/s² at ISS altitude.'],
+  memory:'F = GMm/r². Gravity = product of masses divided by distance squared, scaled by G.' },
+
+{ id:'gravfield', f:'g = GM/r²', name:'Gravitational Field Strength', topic:'fields', given:true,
+  vars:[['g','N/kg or m/s²','Gravitational field strength'],['G','N m² kg⁻²','6.67×10⁻¹¹'],['M','kg','Mass of source (e.g. Earth)'],['r','m','Distance from centre of source']],
+  tip:'g is field strength at a point — independent of the test mass placed there. On Earth surface: g = 9.81 N/kg.',
+  steps:['At 2 Earth radii from centre (r=2R=1.27×10⁷ m):','g = 9.81×(R/2R)² = 9.81/4 = 2.45 N/kg','Satellite orbit at 2R: v = √(gr) = √(2.45×1.27×10⁷) = 5580 m/s','Pendulum there: T = 2π√(1/2.45) = 4.02 s (slower clock!)'],
+  mistake:['Using g=9.81 at all altitudes — it decreases with 1/r².'],
+  memory:'g = GM/r². Field strength, not force. Divide F = GMm/r² by m to get g = GM/r².' },
+
+{ id:'orbital', f:'v = √(GM/r)', name:'Orbital Speed', topic:'fields', given:false,
+  vars:[['v','m/s','Orbital speed'],['G','N m² kg⁻²','6.67×10⁻¹¹'],['M','kg','Mass of central body'],['r','m','Orbital radius']],
+  tip:'Higher orbit = SLOWER speed, longer period. Derived by setting gravity = centripetal: GMm/r² = mv²/r.',
+  steps:['Earth orbit at r=6.77×10⁶ m:','v = √(6.67×10⁻¹¹×6×10²⁴/6.77×10⁶) = 7660 m/s = 7.7 km/s','GPS orbit at r=26 500 km=2.65×10⁷ m:','v = √(6.67×10⁻¹¹×6×10²⁴/2.65×10⁷) = 3870 m/s — much slower!'],
+  mistake:['Thinking satellites at higher altitude are "faster" — they are slower.','Confusing r (from Earth\'s centre) with altitude (from surface).'],
+  memory:'Derived from GMm/r² = mv²/r → cancel m, r → v² = GM/r → v = √(GM/r).' },
+
+{ id:'kepler', f:'T² = 4π²r³/GM', name:"Kepler's 3rd Law", topic:'fields', given:true,
+  vars:[['T','s','Orbital period'],['r','m','Orbital radius (semi-major axis)'],['G','N m² kg⁻²','6.67×10⁻¹¹'],['M','kg','Mass of central body']],
+  tip:'T²∝r³ for all objects orbiting the same body. Plot T² vs r³ → straight line, gradient = 4π²/GM.',
+  steps:['Mars: T=687 days=5.94×10⁷ s.','r³ = T²×GM/4π² = (5.94×10⁷)²×6.67×10⁻¹¹×2×10³⁰/4π²','r = 2.28×10¹¹ m = 1.52 AU ✓','Derived from: v=2πr/T and v=√(GM/r). Combine to eliminate v.'],
+  mistake:['Not cubing r or not squaring T when plotting.','Forgetting T must be in SECONDS.'],
+  memory:'T²∝r³. The further out the orbit, the slower it moves AND the longer the period. Doubly slower.' },
+
+{ id:'coulomb', f:'F = kQ₁Q₂/r²', name:"Coulomb's Law", topic:'fields', given:true,
+  vars:[['F','N','Electrostatic force'],['k','N m² C⁻²','k = 1/4πε₀ = 8.99×10⁹'],['Q₁,Q₂','C','Point charges'],['r','m','Separation']],
+  tip:'Same inverse square form as gravity. Can repel (same sign) OR attract (opposite). 10³⁶× stronger than gravity at same distance.',
+  steps:['Two protons at r=10⁻¹⁵ m (nuclear scale):','F = 9×10⁹×(1.6×10⁻¹⁹)²/(10⁻¹⁵)² = 230 N repulsion!','This is why strong nuclear force must be enormous — overcomes 230 N at nuclear scale.','Compare: gravitational attraction between same protons = 1.87×10⁻³⁴ N — negligible!'],
+  mistake:['Forgetting charges can repel — gravity never repels.','Using wrong value of k (8.99×10⁹, not 9×10⁹ for precision).'],
+  memory:'F = kQ₁Q₂/r². Identical form to gravity but with charges instead of masses. Can be + or −.' },
+
+{ id:'efield', f:'E = Q/4πε₀r²', name:'Electric Field Strength', topic:'fields', given:true,
+  vars:[['E','N/C or V/m','Electric field strength'],['Q','C','Source charge'],['r','m','Distance from charge'],['ε₀','F/m','8.85×10⁻¹² (permittivity of free space)']],
+  tip:'E = F/q — force per unit positive charge. For uniform fields (parallel plates): E = V/d (much simpler!).',
+  steps:['Proton at Bohr radius r=5.3×10⁻¹¹ m:','E = 9×10⁹×1.6×10⁻¹⁹/(5.3×10⁻¹¹)² = 5.1×10¹¹ N/C','Force on electron: F = eE = 1.6×10⁻¹⁹×5.1×10¹¹ = 8.2×10⁻⁸ N','This is the centripetal force for electron orbit!'],
+  mistake:['For uniform fields use E=V/d, not the point charge formula.','Confusing E (field) with ε₀ (permittivity).'],
+  memory:'E = kQ/r². Same structure as Coulomb — just divide force by test charge q.' },
+
+{ id:'magforce', f:'F = BIL sinθ', name:'Force on Current', topic:'fields', given:true,
+  vars:[['F','N','Force on conductor'],['B','T (Tesla)','Magnetic flux density'],['I','A','Current'],['L','m','Length of conductor in field'],['θ','°','Angle between current and B field']],
+  tip:'Maximum force when I ⊥ B (θ=90°). Use Fleming\'s Left Hand Rule: thuMb=Motion, First=Field, seCond=Current.',
+  steps:['Motor coil: B=0.2 T, I=3 A, L=0.05 m, θ=90°.','F = 0.2×3×0.05×sin90° = 0.03 N per conductor','2 conductors = 0.06 N force → creates torque → motor spins!','Increase B or I → more force → faster motor.'],
+  mistake:['Forgetting sinθ — if current is parallel to field (θ=0°), F=0!','Applying to insulators — only conductors (current-carrying) experience this force.'],
+  memory:'F = BIL. "BIL" — say it like a name. Mnemonic: Fleming\'s Left Hand Rule for motors.' },
+
+{ id:'magparticle', f:'F = Bqv', name:'Force on Charged Particle', topic:'fields', given:true,
+  vars:[['F','N','Magnetic force (always ⊥ to velocity)'],['B','T','Magnetic flux density'],['q','C','Charge (1.6×10⁻¹⁹ for proton/electron)'],['v','m/s','Particle speed']],
+  tip:'Force is ALWAYS perpendicular to v → does no work → KE unchanged → circular motion! Radius r = mv/Bq.',
+  steps:['Proton (q=1.6×10⁻¹⁹) at v=10⁶ m/s in B=0.5 T:','F = 0.5×1.6×10⁻¹⁹×10⁶ = 8×10⁻¹⁴ N → circular orbit','r = mv/Bq = 1.67×10⁻²⁷×10⁶/(0.5×1.6×10⁻¹⁹) = 0.021 m','This is how particle accelerators control beam paths.'],
+  mistake:['Thinking the magnetic force does work — it cannot (F⊥v always).','Confusing with F=BIL — this is for single particles.'],
+  memory:'F = Bqv. Perpendicular force → circular path. r = mv/Bq — stronger B → tighter circle.' },
+
+{ id:'magflux', f:'Φ = BA cosθ', name:'Magnetic Flux', topic:'fields', given:true,
+  vars:[['Φ','Wb (Weber)','Magnetic flux through one turn'],['B','T','Magnetic flux density'],['A','m²','Area of coil'],['θ','°','Angle between B and the coil NORMAL']],
+  tip:'Flux linkage = NΦ (N turns). Max flux when coil face ⊥ B (θ=0). Zero flux when coil face ∥ B (θ=90°).',
+  steps:['B=0.5 T, A=0.04 m², coil at θ=30° to field normal:','Φ = 0.5×0.04×cos30° = 0.0173 Wb','When coil rotates: Φ changes → ε = −NdΦ/dt → EMF generated.','This is literally how every power station generator works!'],
+  mistake:['Mixing up θ — it is the angle with the NORMAL, not with the plane of the coil.','Forgetting flux LINKAGE = NΦ (multiplied by number of turns).'],
+  memory:'Φ = BAcosθ. Think of B-field lines "threading through" the coil area. More lines = more flux.' },
+
+{ id:'faraday', f:'ε = −NΔΦ/Δt', name:"Faraday's Law", topic:'fields', given:true,
+  vars:[['ε','V','Induced EMF'],['N','—','Number of turns of coil'],['ΔΦ','Wb','Change in flux through one turn'],['Δt','s','Time taken']],
+  tip:'Lenz\'s law (the minus sign): induced current OPPOSES the change causing it. More turns, faster change = bigger EMF.',
+  steps:['100-turn coil, ΔΦ=0.008 Wb in 0.05 s:','ε = −100×0.008/0.05 = −16 V','Double the speed of field change → 32 V.','This is Faraday\'s law: every dynamo, transformer, generator uses this.'],
+  mistake:['Ignoring the negative sign in exams — Lenz\'s law is worth marks.','Forgetting to multiply by N for a coil (not just one turn).'],
+  memory:'ε = −NdΦ/dt. Rate of flux change = induced voltage. The faster B changes, the bigger the EMF.' },
+
+// ── NUCLEAR ──────────────────────────────────────────────────────
+{ id:'activity', f:'A = λN', name:'Radioactive Activity', topic:'nuke', given:true,
+  vars:[['A','Bq','Activity (decays per second)'],['λ','s⁻¹','Decay constant'],['N','—','Number of undecayed nuclei']],
+  tip:'As N decreases, A decreases proportionally → exponential decay in activity over time.',
+  steps:['Ra-226: λ=1.37×10⁻¹¹ s⁻¹, 1 μg sample.','N = (10⁻⁶/226)×6.02×10²³ = 2.66×10¹⁵ nuclei','A = 1.37×10⁻¹¹×2.66×10¹⁵ = 36 400 Bq','Tiny sample, 36 400 decays per second!'],
+  mistake:['Confusing activity A (Bq) with atomic mass number A — terrible notation clash.','Not finding N in moles first for mass calculations.'],
+  memory:'A = λN. More nuclei → more activity. Larger λ → shorter half-life → higher activity.' },
+
+{ id:'decay', f:'N = N₀e^(−λt)', name:'Radioactive Decay Law', topic:'nuke', given:true,
+  vars:[['N','—','Nuclei remaining at time t'],['N₀','—','Initial number of nuclei'],['λ','s⁻¹','Decay constant'],['t','s','Time elapsed']],
+  tip:'Same mathematical form as capacitor discharge: Q = Q₀e^(−t/RC). Also applies to activity A and count rate C.',
+  steps:['I-131 (thyroid treatment): t½=8 days, λ=ln2/8=0.0866 day⁻¹','After 24 days: N = N₀e^(−0.0866×24) = N₀e^(−2.079) = N₀/8','Check: 24 days = 3×t½ → N₀/2³ = N₀/8 ✓','Take ln: ln(N/N₀) = −λt → t = −ln(N/N₀)/λ'],
+  mistake:['Using t½ directly in the exponent — must convert to λ first: λ = ln2/t½.','Forgetting ln when rearranging to find t.'],
+  memory:'N = N₀e^(−λt). "Half-life is the time for half to decay" → at t=t½, N = N₀/2 → e^(−λt½)=½ → λt½=ln2.' },
+
+{ id:'halflife', f:'t½ = ln2/λ', name:'Half-Life', topic:'nuke', given:true,
+  vars:[['t½','s','Half-life'],['λ','s⁻¹','Decay constant'],['ln2','—','Natural log of 2 ≈ 0.693']],
+  tip:'λ and t½ are inversely related — short half-life = large λ = decays quickly. Graph: plot ln(A) vs t → gradient = −λ.',
+  steps:['C-14 dating: t½=5700 years, λ = 0.693/5700 = 1.22×10⁻⁴ yr⁻¹','Sample has 30% of original C-14 remaining.','N/N₀ = 0.30 → ln(0.30) = −λt → t = −(−1.204)/1.22×10⁻⁴ = 9870 years old.'],
+  mistake:['Using t½ = 0.5/λ (wrong!) — it is ln2/λ = 0.693/λ.','Forgetting to convert half-life units to match t in the decay equation.'],
+  memory:'t½ = 0.693/λ. At t=t½: N=½N₀. At 2t½: N=¼N₀. At nt½: N = N₀/2ⁿ.' },
+
+{ id:'massenergy', f:'ΔE = Δmc²', name:'Mass-Energy Equivalence', topic:'nuke', given:true,
+  vars:[['ΔE','J','Energy released'],['Δm','kg','Mass defect'],['c','m/s','Speed of light = 3×10⁸ m/s']],
+  tip:'1 u = 1.66×10⁻²⁷ kg = 931.5 MeV/c². Use MeV for nuclear problems — far more convenient than Joules.',
+  steps:['U-235 fission: Δm ≈ 3.5×10⁻²⁸ kg per fission event.','ΔE = 3.5×10⁻²⁸×(3×10⁸)² = 3.15×10⁻¹¹ J = 197 MeV','1 mol U-235: ΔE = 3.15×10⁻¹¹×6×10²³ = 1.9×10¹³ J','That\'s equivalent to ~4500 tonnes of TNT from 235 g!'],
+  mistake:['Not squaring c (= 9×10¹⁶) — the energy is enormous because c² is huge.','Using mass in grams rather than kg.'],
+  memory:'E = mc². The c² factor (9×10¹⁶) makes tiny mass defects release enormous energy. Fission/fusion both.' },
+
+// ── THERMAL ──────────────────────────────────────────────────────
+{ id:'idealgas', f:'pV = nRT', name:'Ideal Gas Law', topic:'therm', given:true,
+  vars:[['p','Pa','Pressure'],['V','m³','Volume'],['n','mol','Number of moles'],['R','J mol⁻¹ K⁻¹','Gas constant = 8.31'],['T','K','Absolute temperature (KELVIN!)']],
+  tip:'Always use temperature in KELVIN: T(K) = T(°C) + 273. For fixed mass: pV/T = constant (combine gas laws).',
+  steps:['Bike tyre: p=3×10⁵ Pa, V=0.002 m³, T=293 K.','n = pV/RT = 6×10²/8.31/293 = 0.247 mol','Heat to 40°C (313 K): p₂ = p₁T₂/T₁ = 3×10⁵×313/293 = 3.2×10⁵ Pa','Volume unchanged → pressure rises. Risk of blowout in hot weather!'],
+  mistake:['Using °C instead of Kelvin — will give completely wrong answers.','Confusing n (moles) with N (number of molecules): pV = NkT is the other form.'],
+  memory:'pV = nRT. Fixed mass: pV/T = nR = constant. Ideal gas: no intermolecular forces, point particles.' },
+
+{ id:'meankE', f:'⟨Eₖ⟩ = 3/2 kT', name:'Mean Kinetic Energy', topic:'therm', given:true,
+  vars:[['⟨Eₖ⟩','J','Mean kinetic energy per molecule'],['k','J/K','Boltzmann constant = 1.38×10⁻²³'],['T','K','Absolute temperature']],
+  tip:'Mean KE is proportional to T in KELVIN only. Doubling Kelvin temperature doubles mean KE — but 20°C → 40°C does NOT double it.',
+  steps:['Air at T=300 K: ⟨Eₖ⟩ = 1.5×1.38×10⁻²³×300 = 6.21×10⁻²¹ J','N₂ molecule m=4.65×10⁻²⁶ kg:','½mv² = 6.21×10⁻²¹ → v = √(2×6.21×10⁻²¹/4.65×10⁻²⁶) = 517 m/s','Heat to 600 K: ⟨Eₖ⟩ doubles → v increases by √2 only.'],
+  mistake:['Doubling Celsius temperature and thinking KE doubles — must use Kelvin.','Confusing per molecule (use k) with per mole (use R = Nₐk).'],
+  memory:'⟨Eₖ⟩ = 3/2 kT. Three degrees of freedom (x,y,z), each ½kT. Temperature IS average KE.' },
+
+{ id:'shc', f:'Q = mcΔθ', name:'Specific Heat Capacity', topic:'therm', given:true,
+  vars:[['Q','J','Heat energy transferred'],['m','kg','Mass'],['c','J kg⁻¹ K⁻¹','Specific heat capacity'],['Δθ','K or °C','Change in temperature']],
+  tip:'Water has c = 4200 J/kg/K (very high) — oceans act as climate regulators. Metals have low c — heat up fast.',
+  steps:['3 kW kettle heats 1 kg water from 20°C to 100°C.','Q = 1×4200×80 = 336 000 J','t = Q/P = 336000/3000 = 112 s ≈ 1 min 52 s ✓','Aluminium c=900 J/kg/K: same heat, Δθ = Q/mc = 336000/(1×900) = 373°C!'],
+  mistake:['Using mass in grams not kg.','Using wrong value of c — it\'s a property of the material, must be looked up.'],
+  memory:'Q = mcΔθ. Heat in = mass × specific heat × temperature rise. Water\'s high c is why radiators work.' },
+
+// ── ASTROPHYSICS ─────────────────────────────────────────────────
+{ id:'stefan', f:'L = 4πr²σT⁴', name:'Stefan-Boltzmann Law', topic:'astro', given:true,
+  vars:[['L','W','Luminosity (total power output)'],['r','m','Star radius'],['σ','W m⁻² K⁻⁴','Stefan-Boltzmann constant = 5.67×10⁻⁸'],['T','K','Surface temperature']],
+  tip:'L ∝ T⁴ — a small temperature increase → massive luminosity increase! This explains the HR diagram.',
+  steps:['Sun: r=7×10⁸ m, T=5778 K.','L = 4π×(7×10⁸)²×5.67×10⁻⁸×5778⁴ = 3.85×10²⁶ W','Star 2× hotter (T=11556 K), same radius: L increases by 2⁴ = 16×!','Star 2× bigger (r=2R), same T: L increases by 4× (∝r²).'],
+  mistake:['Forgetting T⁴ not T — temperature has a HUGE effect on luminosity.','Confusing L (luminosity = total power) with F (flux = power per m² at Earth).'],
+  memory:'L = 4πr²σT⁴. Surface area × power per m² (= σT⁴). T⁴ makes small ΔT → large ΔL.' },
+
+{ id:'wien', f:'λₘₐₓT = 2.9×10⁻³', name:"Wien's Displacement Law", topic:'astro', given:true,
+  vars:[['λₘₐₓ','m','Peak wavelength of emitted radiation'],['T','K','Surface temperature'],['2.9×10⁻³','m K','Wien\'s displacement constant']],
+  tip:'Hotter stars are BLUER (shorter λ), cooler stars are REDDER (longer λ). Use to find star temperature from spectrum.',
+  steps:['Sun T=5778 K: λₘₐₓ = 2.9×10⁻³/5778 = 502 nm (green-yellow light)','Betelgeuse T=3500 K: λₘₐₓ = 829 nm (infrared/deep red)','Sirius T=9940 K: λₘₐₓ = 292 nm (UV — appears blue-white)','Human eyes peak at ~550 nm — we evolved under the Sun!'],
+  mistake:['Mixing up: hotter = shorter λ = BLUE; cooler = longer λ = RED.','Forgetting T must be in Kelvin.'],
+  memory:'λₘₐₓT = 2.9×10⁻³. Hotter star, smaller λ, bluer colour. "Hot = blue, cold = red" (opposite to feelings!).' },
+
+{ id:'flux', f:'F = L/4πd²', name:'Flux (Inverse Square Law)', topic:'astro', given:true,
+  vars:[['F','W/m²','Flux (power received per unit area)'],['L','W','Luminosity of source'],['d','m','Distance to star']],
+  tip:'Flux ∝ 1/d² — double the distance, quarter the flux. This is how stellar distances are measured.',
+  steps:['Sun: L=3.85×10²⁶ W, d=1.5×10¹¹ m (1 AU)','F = 3.85×10²⁶/(4π×(1.5×10¹¹)²) = 1361 W/m² (solar constant!)','Mars at d=2.28×10¹¹ m: F = 1361×(1.5/2.28)² = 589 W/m²','A star 10× farther → flux 100× less.'],
+  mistake:['Using diameter instead of distance d in the formula.','Not squaring d in 4πd².'],
+  memory:'F = L/4πd². Power spread over a sphere of surface area 4πd². Same 1/r² as gravity and electric fields.' },
+
+{ id:'doppler', f:'Δλ/λ = v/c', name:'Doppler Redshift', topic:'astro', given:true,
+  vars:[['Δλ','m','Change in wavelength (λ_obs − λ_rest)'],['λ','m','Rest wavelength'],['v','m/s','Recession speed (v ≪ c)'],['c','m/s','Speed of light = 3×10⁸ m/s']],
+  tip:'Redshift (Δλ>0) = moving away. Blueshift (Δλ<0) = moving toward us. Measure spectral lines to find v.',
+  steps:['Hα rest λ=656.3 nm, observed 670 nm from distant galaxy.','Δλ = 13.7 nm','v = c×Δλ/λ = 3×10⁸×13.7×10⁻⁹/656.3×10⁻⁹ = 6.27×10⁶ m/s','Galaxy recession speed ≈ 6300 km/s (2.1% of c).'],
+  mistake:['Mixing up Δλ sign: redshift = wavelength increased (stretched), not decreased.','Using this formula for v close to c — only valid for v ≪ c.'],
+  memory:'Δλ/λ = v/c. Fractional wavelength shift = fractional speed relative to c. Bigger shift = faster recession.' },
+
+{ id:'hubble', f:'v = H₀d', name:"Hubble's Law", topic:'astro', given:true,
+  vars:[['v','km/s','Recession velocity'],['H₀','km/s/Mpc','Hubble constant ≈ 70 km/s/Mpc'],['d','Mpc','Distance to galaxy (megaparsecs)']],
+  tip:'Every galaxy recedes at speed proportional to distance — evidence for expanding universe. Age ≈ 1/H₀.',
+  steps:['Galaxy recession speed 21 000 km/s:','d = v/H₀ = 21000/70 = 300 Mpc','1 Mpc = 3.09×10²² m → d = 9.3×10²⁴ m = 978 million light-years!','Age of universe: t = 1/H₀ = 1/(70 km/s/Mpc) ≈ 14 billion years.'],
+  mistake:['Forgetting to convert H₀ to SI (s⁻¹) when finding age in seconds.','Treating H₀ as exact — it has significant observational uncertainty.'],
+  memory:'v = H₀d. Farther galaxy → faster recession. Like raisins in expanding bread dough — all recede from each other.' },
+];
+
+const links = [
+  { s:'suvat1',  t:'suvat2',    r:'Share u, a, t — use together to solve any kinematics problem' },
+  { s:'suvat1',  t:'suvat3',    r:'Eliminate t to get v²=u²+2as — same motion described differently' },
+  { s:'suvat2',  t:'suvat3',    r:'Both describe displacement — choose based on whether time is known' },
+  { s:'suvat1',  t:'suvat4',    r:'Both give final velocity — suvat4 uses average velocity approach' },
+  { s:'newton2', t:'suvat1',    r:'a = F/m → substitute into SUVAT to get velocity' },
+  { s:'newton2', t:'weight',    r:'W = mg is F = ma with a = g (gravitational acceleration)' },
+  { s:'newton2', t:'impulse',   r:'F = ma = Δp/Δt — Newton\'s 2nd stated in terms of momentum' },
+  { s:'newton2', t:'centforce', r:'Centripetal force F = mv²/r obeys F = ma with a = v²/r' },
+  { s:'newton2', t:'shmaccel',  r:'F = −kx = ma → a = −(k/m)x — Newton 2 gives SHM' },
+  { s:'momentum',t:'impulse',   r:'Impulse = change in momentum = FΔt' },
+  { s:'momentum',t:'ke',        r:'Eₖ = p²/2m — link between KE and momentum' },
+  { s:'momentum',t:'debroglie', r:'de Broglie λ = h/p uses momentum p = mv directly' },
+  { s:'weight',  t:'gravfield', r:'g = GM/r² gives field strength; W = mg gives force on mass m' },
+  { s:'weight',  t:'gpe',       r:'Both use mg — Eₚ = mgh and W = mg are deeply linked' },
+  { s:'ke',      t:'gpe',       r:'Energy conservation: Eₖ + Eₚ = constant (no friction)' },
+  { s:'ke',      t:'work',      r:'Work–energy theorem: net work done = change in KE' },
+  { s:'ke',      t:'suvat3',    r:'v²=u²+2as → Eₖ = ½mv² — kinematics leads to energy' },
+  { s:'ke',      t:'photoelec', r:'Eₖ max = hf − φ — photon gives KE to electron' },
+  { s:'ke',      t:'meankE',    r:'⟨Eₖ⟩ = ½mv²rms — thermal KE is kinetic energy of molecules' },
+  { s:'ke',      t:'shmvmax',   r:'All Eₚ → Eₖ at equilibrium: ½kA² = ½mv²max' },
+  { s:'gpe',     t:'work',      r:'Work done against gravity = increase in Eₚ' },
+  { s:'work',    t:'power',     r:'P = W/t — power is rate of doing work' },
+  { s:'power',   t:'elecpow',   r:'P = VI is just W/t in electrical terms' },
+  { s:'hookeslaw',t:'epe',      r:'E = ½kx² is the integral of F = kx over extension' },
+  { s:'hookeslaw',t:'massspring',r:'ω² = k/m links Hooke\'s k to SHM period T = 2π√(m/k)' },
+  { s:'epe',     t:'ke',        r:'Spring releases EPE as KE: ½kA² = ½mv²max at equilibrium' },
+  { s:'youngmod',t:'hookeslaw', r:'Both describe elastic behaviour — different scales (material vs spring)' },
+  { s:'wavespeed',t:'photon',   r:'E = hc/λ combines wave speed with photon energy' },
+  { s:'wavespeed',t:'refindex', r:'n = c/v; wavespeed in medium v = c/n from v = fλ' },
+  { s:'wavespeed',t:'diffgrat', r:'Both use λ — grating finds λ, then v = fλ gives wave speed' },
+  { s:'wavespeed',t:'youngsslit',r:'Both use λ — Young\'s measures λ, v = fλ connects to speed' },
+  { s:'wavespeed',t:'doppler',  r:'Doppler: Δλ/λ = v/c depends on v = fλ relationship' },
+  { s:'snell',   t:'refindex',  r:'n = sinθ₁/sinθ₂ = c/v — Snell\'s law derived from n = c/v' },
+  { s:'snell',   t:'critangle', r:'TIR when θ₂ = 90° → sinθc = n₂/n₁ = 1/n' },
+  { s:'refindex',t:'critangle', r:'sinθc = 1/n — derived by setting refracted angle = 90°' },
+  { s:'diffgrat',t:'youngsslit',r:'Both measure λ by interference — grating is more precise' },
+  { s:'photon',  t:'photoelec', r:'hf = φ + Eₖ — photoelectric uses E = hf directly' },
+  { s:'photon',  t:'eelevel',   r:'Transition energy ΔE = hf — same equation, emission/absorption' },
+  { s:'photon',  t:'debroglie', r:'Both involve h — wave-particle duality of radiation and matter' },
+  { s:'photon',  t:'wien',      r:'Peak photon: E = hc/λmax — Wien\'s law gives λmax' },
+  { s:'photoelec',t:'ke',       r:'Eₖ of emitted electron = hf − φ (maximum KE)' },
+  { s:'charge',  t:'ohm',       r:'I = Q/t; V = IR — current from charge flow, then Ohm applied' },
+  { s:'charge',  t:'capacitance',r:'C = Q/V — charge stored per volt of potential difference' },
+  { s:'drift',   t:'charge',    r:'I = nqvA gives current I; Q = It gives total charge flowing' },
+  { s:'drift',   t:'magparticle',r:'Both contain charge q and velocity v; drifting electrons feel Bqv' },
+  { s:'ohm',     t:'elecpow',   r:'P = VI = V²/R = I²R — all derived using V = IR' },
+  { s:'ohm',     t:'resistivity',r:'R = ρL/A gives R which is used in V = IR' },
+  { s:'ohm',     t:'emfint',    r:'ε = I(R+r) is Ohm\'s law for the complete circuit' },
+  { s:'capacitance',t:'capenergy',r:'E = ½QV = ½CV² — energy stored using C = Q/V' },
+  { s:'capacitance',t:'capdischarge',r:'τ = RC — time constant directly uses capacitance' },
+  { s:'capenergy',t:'ke',       r:'Cap energy → KE if charge accelerates a mass (e.g. rail gun)' },
+  { s:'capdischarge',t:'decay', r:'Same mathematics: Q=Q₀e^(−t/RC) and N=N₀e^(−λt)' },
+  { s:'angvel',  t:'centaccel', r:'a = ω²r uses angular velocity' },
+  { s:'angvel',  t:'shmaccel',  r:'a = −ω²x — same ω connects circular motion and SHM' },
+  { s:'angvel',  t:'shmdisp',   r:'x = Acos(ωt) — ω appears as the frequency of oscillation' },
+  { s:'angvel',  t:'pendulum',  r:'ω = 2π/T → T = 2π/ω = 2π√(l/g)' },
+  { s:'angvel',  t:'massspring',r:'ω = √(k/m) links spring constant to oscillation frequency' },
+  { s:'centaccel',t:'centforce',r:'F = ma = m×v²/r — Newton 2nd applied to circular motion' },
+  { s:'centforce',t:'gravnewton',r:'Gravity provides centripetal force for orbital motion' },
+  { s:'centforce',t:'magparticle',r:'Magnetic force = centripetal: Bqv = mv²/r → r = mv/Bq' },
+  { s:'centforce',t:'orbital',  r:'GMm/r² = mv²/r → v = √(GM/r) for circular orbit' },
+  { s:'shmaccel',t:'shmdisp',   r:'a = d²x/dt² — differentiate x=Acos(ωt) twice' },
+  { s:'shmaccel',t:'hookeslaw', r:'F = −kx → a = −(k/m)x → ω² = k/m' },
+  { s:'shmdisp', t:'shmvmax',   r:'Differentiate x: v = −Aωsin(ωt), max speed = Aω' },
+  { s:'pendulum',t:'gravfield', r:'g appears in T=2π√(l/g) — measure T to find g' },
+  { s:'pendulum',t:'massspring',r:'Both SHM: compare structure T=2π√(l/g) vs T=2π√(m/k)' },
+  { s:'gravnewton',t:'gravfield',r:'g = F/m = GM/r² — field strength from Newton\'s law / m' },
+  { s:'gravnewton',t:'orbital', r:'GMm/r² = mv²/r → v = √(GM/r) — orbital speed' },
+  { s:'gravfield',t:'pendulum', r:'g in pendulum period — measure T to find local g' },
+  { s:'orbital', t:'kepler',    r:'Substitute v=2πr/T into v=√(GM/r) → T²∝r³ (Kepler 3)' },
+  { s:'orbital', t:'centforce', r:'Gravity provides centripetal force: GMm/r² = mv²/r' },
+  { s:'coulomb', t:'efield',    r:'E = F/q = kQ/r² — electric field from Coulomb force ÷ q' },
+  { s:'efield',  t:'magparticle',r:'In crossed E and B fields: select velocity when qE = qvB → v = E/B' },
+  { s:'magforce',t:'magparticle',r:'F=BIL is F=Bqv per charge carrier — same physics' },
+  { s:'magforce',t:'faraday',   r:'Motor effect (F) and generator effect (EMF) are inverse processes' },
+  { s:'magflux', t:'faraday',   r:'ε = −NdΦ/dt — Faraday uses rate of change of flux Φ = BAcosθ' },
+  { s:'activity',t:'decay',     r:'A = dN/dt = λN₀e^(−λt) — activity follows same decay curve' },
+  { s:'activity',t:'halflife',  r:'Both contain λ; at t=t½ activity = A₀/2' },
+  { s:'decay',   t:'halflife',  r:'t½ = ln2/λ — derived by setting N = N₀/2 in decay law' },
+  { s:'massenergy',t:'photon',  r:'Pair annihilation: 2mc² = 2hf — mass → photon energy' },
+  { s:'massenergy',t:'activity',r:'Each nuclear decay releases ΔE = Δmc² as radiation' },
+  { s:'idealgas',t:'meankE',    r:'pV = NkT and ⟨Eₖ⟩ = 3/2 kT — both use Boltzmann k, T' },
+  { s:'meankE',  t:'ke',        r:'⟨Eₖ⟩ = ½mv²rms — mean KE is average molecular KE' },
+  { s:'idealgas',t:'shc',       r:'Q = mcΔθ changes T; pV/T = const shows effect on pressure/volume' },
+  { s:'stefan',  t:'wien',      r:'Both describe blackbody emission — use together to fully characterise a star' },
+  { s:'stefan',  t:'flux',      r:'F = L/4πd² — flux uses L from Stefan-Boltzmann law' },
+  { s:'doppler', t:'hubble',    r:'Hubble\'s law uses recession speed v measured by Doppler shift' },
+  { s:'flux',    t:'hubble',    r:'Flux+redshift together give distance and velocity → plot v vs d → H₀' },
+  { s:'wien',    t:'photon',    r:'Peak photon energy E = hc/λmax — Wien gives λmax, Planck gives E' },
+];
+
+// ════════════════════════════════════════════════════════════════
+// BUILD INDEX
+// ════════════════════════════════════════════════════════════════
+const byId = {};
+nodes.forEach(n => { byId[n.id] = n; });
+const adj = {};
+nodes.forEach(n => { adj[n.id] = []; });
+links.forEach(l => {
+  if (!adj[l.s]) adj[l.s] = [];
+  if (!adj[l.t]) adj[l.t] = [];
+  if (byId[l.s] && byId[l.t]) {
+    adj[l.s].push({ id:l.t, reason:l.r });
+    adj[l.t].push({ id:l.s, reason:l.r });
+  }
+});
+
+// ════════════════════════════════════════════════════════════════
+// TOPIC FILTERS
+// ════════════════════════════════════════════════════════════════
+const filterBar = document.getElementById('topic-filters');
+Object.entries(TOPICS).forEach(([key, t]) => {
+  const btn = document.createElement('button');
+  btn.className = 'topic-btn';
+  btn.dataset.topic = key;
+  btn.textContent = t.label;
+  btn.addEventListener('click', () => toggleTopicFilter(key, btn, t.color));
+  filterBar.appendChild(btn);
+});
+
+let activeTopicFilter = null;
+function toggleTopicFilter(key, btn, color) {
+  if (activeTopicFilter === key) {
+    activeTopicFilter = null;
+    document.querySelectorAll('.topic-btn').forEach(b => {
+      b.classList.remove('active');
+      b.style.background = '';
+      b.style.color = '';
+    });
+    applyDimming(null);
+  } else {
+    activeTopicFilter = key;
+    document.querySelectorAll('.topic-btn').forEach(b => {
+      b.classList.remove('active');
+      b.style.background = '';
+      b.style.color = '';
+    });
+    btn.classList.add('active');
+    btn.style.background = color;
+    btn.style.color = '#000';
+    applyDimming(key);
+  }
+}
+
+function applyDimming(topicKey) {
+  document.querySelectorAll('.node-card').forEach(card => {
+    if (!topicKey) {
+      card.classList.remove('dimmed');
+    } else {
+      card.classList.toggle('dimmed', card.dataset.topic !== topicKey);
+    }
+  });
+}
+
+// ════════════════════════════════════════════════════════════════
+// LAYOUT: unified world transform
+// ════════════════════════════════════════════════════════════════
+const canvas = document.getElementById('link-canvas');
+const ctx = canvas.getContext('2d');
+const world = document.getElementById('world');
+const panLayer = document.getElementById('pan-layer');
+const W = () => window.innerWidth;
+const H = () => window.innerHeight;
+
+// ── WORLD TRANSFORM STATE (must be before resizeCanvas call) ─────
+let tx = 0, ty = 54, scale = 1;
+
+function resizeCanvas() { canvas.width = W(); canvas.height = H(); if (window._ready) drawLinks(); }
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+function applyTransform() {
+  world.style.transform = `translate(${tx}px,${ty}px) scale(${scale})`;
+  if (window._ready) drawLinks();
+}
+
+// ── CLUSTER CENTRES (in a large 3000×2000 world space) ──────────
+const clusters = {
+  mech:   { x:0.18, y:0.36 },
+  waves:  { x:0.40, y:0.18 },
+  parts:  { x:0.62, y:0.20 },
+  elec:   { x:0.76, y:0.42 },
+  shm:    { x:0.18, y:0.62 },
+  fields: { x:0.68, y:0.64 },
+  nuke:   { x:0.48, y:0.76 },
+  therm:  { x:0.30, y:0.74 },
+  astro:  { x:0.74, y:0.18 },
+};
+const WW = 3000, WH = 2000;
+
+nodes.forEach(n => {
+  const c = clusters[n.topic];
+  n.x = c.x * WW + (Math.random()-0.5)*160;
+  n.y = c.y * WH + (Math.random()-0.5)*140;
+  n.vx = 0; n.vy = 0;
+});
+
+// ── CREATE NODE CARDS in #world ──────────────────────────────────
+const cardEls = {};
+const NODE_W = 148, NODE_H = 52;
+
+nodes.forEach(n => {
+  const tc = TOPICS[n.topic].color;
+  const div = document.createElement('div');
+  div.className = 'node-card';
+  div.dataset.id = n.id;
+  div.dataset.topic = n.topic;
+  div.style.setProperty('--tc', tc);
+  div.innerHTML = `
+    <div class="node-inner">
+      <div class="node-formula">${n.f}</div>
+      <div class="node-name">
+        <span class="node-topic-dot" style="background:${tc}"></span>${n.name}
+      </div>
+    </div>`;
+  div.addEventListener('mousedown', e => startNodeDrag(e, n));
+  world.appendChild(div);
+  cardEls[n.id] = div;
+});
+
+function updatePositions() {
+  nodes.forEach(n => {
+    const el = cardEls[n.id];
+    el.style.left = Math.round(n.x - NODE_W/2) + 'px';
+    el.style.top  = Math.round(n.y - NODE_H/2) + 'px';
+  });
+}
+
+// ── PAN (drag on background / canvas) ────────────────────────────
+let isPanning = false;
+let panStart = {x:0,y:0}, panOrigin = {x:0,y:0};
+let panMoved = false;
+
+function onPanStart(e) {
+  if (e.button !== 0) return;
+  isPanning = true; panMoved = false;
+  panStart  = { x: e.clientX, y: e.clientY };
+  panOrigin = { x: tx, y: ty };
+  panLayer.classList.add('panning');
+}
+window.addEventListener('mousemove', e => {
+  if (!isPanning) return;
+  const dx = e.clientX - panStart.x, dy = e.clientY - panStart.y;
+  if (Math.abs(dx) > 2 || Math.abs(dy) > 2) panMoved = true;
+  tx = panOrigin.x + dx;
+  ty = panOrigin.y + dy;
+  applyTransform();
+});
+window.addEventListener('mouseup', () => { isPanning = false; panLayer.classList.remove('panning'); });
+panLayer.addEventListener('mousedown', onPanStart);
+panLayer.addEventListener('click', () => { if (!panMoved) clearSelection(); });
+
+// ── ZOOM ─────────────────────────────────────────────────────────
+function zoomAt(cx, cy, factor) {
+  const ns = Math.max(0.15, Math.min(2.5, scale * factor));
+  tx = cx - (cx - tx) * (ns / scale);
+  ty = cy - (cy - ty) * (ns / scale);
+  scale = ns;
+  applyTransform();
+}
+
+window.addEventListener('wheel', e => {
+  e.preventDefault();
+  zoomAt(e.clientX, e.clientY, e.deltaY > 0 ? 0.91 : 1.10);
+}, { passive: false });
+
+document.getElementById('btn-zoomin').addEventListener('click',  () => zoomAt(W()/2, H()/2, 1.3));
+document.getElementById('btn-zoomout').addEventListener('click', () => zoomAt(W()/2, H()/2, 0.77));
+document.getElementById('btn-fit').addEventListener('click', fitAll);
+
+function fitAll() {
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  nodes.forEach(n => {
+    minX=Math.min(minX,n.x-NODE_W/2); minY=Math.min(minY,n.y-NODE_H/2);
+    maxX=Math.max(maxX,n.x+NODE_W/2); maxY=Math.max(maxY,n.y+NODE_H/2);
+  });
+  const pad=60, avW=W()-pad*2, avH=H()-54-pad*2;
+  const ns = Math.min(avW/(maxX-minX), avH/(maxY-minY), 1.1);
+  tx = pad - minX*ns;
+  ty = 54 + pad - minY*ns;
+  scale = ns;
+  applyTransform();
+}
+
+// ── DRAG NODES ───────────────────────────────────────────────────
+// Single source of truth: a node is "being dragged" if mouse moved > threshold
+let activeDrag = null; // { node, startX, startY, ox, oy, moved }
+
+function startNodeDrag(e, n) {
+  if (e.button !== 0) return;
+  e.stopPropagation();
+  activeDrag = { node:n, startX:e.clientX, startY:e.clientY, ox:n.x, oy:n.y, moved:false };
+  n.fx = n.x; n.fy = n.y;
+
+  function onMove(ev) {
+    if (!activeDrag) return;
+    const dx=(ev.clientX-activeDrag.startX)/scale, dy=(ev.clientY-activeDrag.startY)/scale;
+    if (Math.abs(dx)>4||Math.abs(dy)>4) activeDrag.moved=true;
+    if (activeDrag.moved) {
+      n.x=activeDrag.ox+dx; n.y=activeDrag.oy+dy;
+      n.fx=n.x; n.fy=n.y;
+      updatePositions(); drawLinks();
+    }
+  }
+  function onUp(ev) {
+    if (!activeDrag) return;
+    const wasDrag = activeDrag.moved;
+    n.fx=null; n.fy=null;
+    activeDrag=null;
+    window.removeEventListener('mousemove',onMove);
+    window.removeEventListener('mouseup',onUp);
+    // If it was a clean click (no drag), select the node
+    if (!wasDrag) selectNode(n);
+  }
+  window.addEventListener('mousemove',onMove);
+  window.addEventListener('mouseup',onUp);
+}
+
+// ── D3 SIMULATION ────────────────────────────────────────────────
+const validLinks = links.filter(l => byId[l.s] && byId[l.t]);
+const sim = d3.forceSimulation(nodes)
+  .force('link', d3.forceLink(validLinks.map(l=>({source:l.s,target:l.t})))
+    .id(d=>d.id).distance(200).strength(0.18))
+  .force('charge', d3.forceManyBody().strength(-400))
+  .force('collision', d3.forceCollide(95))
+  .force('cluster', () => {
+    nodes.forEach(n => {
+      if (!n.fx) n.vx += (clusters[n.topic].x*WW - n.x)*0.010;
+      if (!n.fy) n.vy += (clusters[n.topic].y*WH - n.y)*0.010;
+    });
+  })
+  .alphaDecay(0.007)
+  .on('tick', () => { updatePositions(); drawLinks(); });
+
+// Fit once settled
+sim.on('end', fitAll);
+setTimeout(fitAll, 2500);
+
+// ── DRAW LINKS ───────────────────────────────────────────────────
+let activeNodeId = null;
+window._ready = true; // all variables now declared — safe to call drawLinks
+resizeCanvas();       // now do the initial canvas size + draw
+
+function drawLinks() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.save();
+  ctx.translate(tx, ty);
+  ctx.scale(scale, scale);
+
+  validLinks.forEach(l => {
+    const src = byId[l.s], tgt = byId[l.t];
+    if (!src||!tgt) return;
+    const isActive = activeNodeId && (l.s===activeNodeId||l.t===activeNodeId);
+    if (activeNodeId && !isActive) {
+      ctx.globalAlpha=0.04; ctx.strokeStyle='#4a7a9b'; ctx.lineWidth=1/scale;
+    } else if (isActive) {
+      ctx.globalAlpha=0.85; ctx.strokeStyle=TOPICS[byId[activeNodeId].topic].color; ctx.lineWidth=2.5/scale;
+    } else {
+      ctx.globalAlpha=0.14; ctx.strokeStyle='#5a8aad'; ctx.lineWidth=1.2/scale;
+    }
+    ctx.beginPath(); ctx.moveTo(src.x,src.y); ctx.lineTo(tgt.x,tgt.y); ctx.stroke();
+    if (isActive) {
+      const angle=Math.atan2(tgt.y-src.y,tgt.x-src.x);
+      const mx=(src.x+tgt.x)/2, my=(src.y+tgt.y)/2, a=8/scale;
+      ctx.beginPath();
+      ctx.moveTo(mx+a*Math.cos(angle-0.42),my+a*Math.sin(angle-0.42));
+      ctx.lineTo(mx+a*1.6*Math.cos(angle),my+a*1.6*Math.sin(angle));
+      ctx.lineTo(mx+a*Math.cos(angle+0.42),my+a*Math.sin(angle+0.42));
+      ctx.fillStyle=ctx.strokeStyle; ctx.globalAlpha=0.75; ctx.fill();
+    }
+  });
+  ctx.restore();
+  ctx.globalAlpha=1;
+}
+
+// ════════════════════════════════════════════════════════════════
+// SELECTION & PANEL
+// ════════════════════════════════════════════════════════════════
+function selectNode(n) {
+  activeNodeId = n.id;
+  const neighbours = new Set(adj[n.id].map(x => x.id));
+  neighbours.add(n.id);
+  document.querySelectorAll('.node-card').forEach(el => {
+    const id = el.dataset.id;
+    el.classList.remove('selected','neighbour','dimmed');
+    if (id === n.id) el.classList.add('selected');
+    else if (neighbours.has(id)) el.classList.add('neighbour');
+    else if (activeTopicFilter === null) el.classList.add('dimmed');
+  });
+  drawLinks();
+  openPanel(n);
+}
+
+function clearSelection() {
+  activeNodeId = null;
+  activeTopicFilter = null;
+  document.querySelectorAll('.node-card').forEach(el => el.classList.remove('selected','neighbour','dimmed'));
+  document.querySelectorAll('.topic-btn').forEach(b => { b.classList.remove('active'); b.style.background=''; b.style.color=''; });
+  document.getElementById('search').value = '';
+  closePanel();
+  drawLinks();
+}
+document.getElementById('clear-btn').addEventListener('click', clearSelection);
+
+// ── PANEL BUILDER ────────────────────────────────────────────────
+function openPanel(n) {
+  const t = TOPICS[n.topic];
+  const ph = document.getElementById('ph-topic');
+  ph.textContent = t.label;
+  ph.style.color = t.color;
+  ph.style.borderColor = t.color;
+  ph.style.background = t.color + '18';
+
+  const pf = document.getElementById('ph-formula');
+  pf.textContent = n.f;
+  pf.style.color = t.color;
+
+  document.getElementById('ph-name').innerHTML =
+    n.name + (n.given ? '<span class="ph-given">★ GIVEN IN EXAM</span>' : '');
+
+  const scroll = document.getElementById('panel-scroll');
+  scroll.innerHTML = '';
+
+  // 1. Variables
+  if (n.vars && n.vars.length) {
+    const sec = makeSec('Variables & Units');
+    const tbl = document.createElement('table');
+    tbl.className = 'var-table';
+    n.vars.forEach(([sym, unit, desc]) => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td class="var-sym">${sym}</td><td class="var-unit">${unit}</td><td class="var-desc">${desc}</td>`;
+      tbl.appendChild(tr);
+    });
+    sec.body.appendChild(tbl);
+    scroll.appendChild(sec.el);
+  }
+
+  // 2. Worked example
+  if (n.steps && n.steps.length) {
+    const sec = makeSec('⚡ Exam Worked Example');
+    n.steps.forEach((s, i) => {
+      const ismath = s.includes('=') || s.includes('→') || s.startsWith('v ') || /^\d/.test(s);
+      if (ismath) {
+        const code = document.createElement('code');
+        code.className = 'step-math';
+        code.textContent = s;
+        sec.body.appendChild(code);
+      } else {
+        const div = document.createElement('div');
+        div.className = 'worked-step';
+        div.innerHTML = `<span class="step-num">${i+1}</span><span class="step-text">${s}</span>`;
+        sec.body.appendChild(div);
+      }
+    });
+    scroll.appendChild(sec.el);
+  }
+
+  // 3. Memory tip
+  if (n.memory) {
+    const sec = makeSec('💡 Memory Tip');
+    const box = document.createElement('div');
+    box.className = 'tip-box';
+    box.textContent = n.memory;
+    sec.body.appendChild(box);
+    scroll.appendChild(sec.el);
+  }
+
+  // 4. Common mistakes
+  if (n.mistake && n.mistake.length) {
+    const sec = makeSec('⚠️ Common Exam Mistakes');
+    n.mistake.forEach(m => {
+      const div = document.createElement('div');
+      div.className = 'mistake-item';
+      div.innerHTML = `<span class="mistake-icon">✗</span><span class="mistake-text">${m}</span>`;
+      sec.body.appendChild(div);
+    });
+    scroll.appendChild(sec.el);
+  }
+
+  // 5. Connections
+  const neighbours = adj[n.id] || [];
+  if (neighbours.length) {
+    const sec = makeSec(`🔗 Connects To (${neighbours.length})`);
+    neighbours.forEach(nb => {
+      const nd = byId[nb.id];
+      if (!nd) return;
+      const nt = TOPICS[nd.topic];
+      const item = document.createElement('div');
+      item.className = 'conn-item';
+      item.innerHTML = `
+        <span class="conn-dot" style="background:${nt.color}"></span>
+        <div class="conn-right">
+          <div class="conn-f" style="color:${nt.color}">${nd.f} <span style="font-family:Outfit;font-weight:400;font-size:10px;color:rgba(180,200,230,0.4)">${nd.name}</span></div>
+          <div class="conn-why">${nb.reason}</div>
+        </div>`;
+      item.addEventListener('click', () => selectNode(nd));
+      sec.body.appendChild(item);
+    });
+    scroll.appendChild(sec.el);
+  }
+
+  document.getElementById('panel').classList.add('open');
+}
+
+function makeSec(label) {
+  const el = document.createElement('div');
+  el.className = 'psec';
+  const lbl = document.createElement('div');
+  lbl.className = 'psec-label';
+  lbl.textContent = label;
+  const body = document.createElement('div');
+  el.appendChild(lbl);
+  el.appendChild(body);
+  return { el, body };
+}
+
+function closePanel() {
+  document.getElementById('panel').classList.remove('open');
+}
+document.getElementById('close-btn').addEventListener('click', closePanel);
+
+// ── SEARCH ────────────────────────────────────────────────────────
+document.getElementById('search').addEventListener('input', function() {
+  const q = this.value.toLowerCase().trim();
+  if (!q) { clearSelection(); return; }
+  const hits = nodes.filter(n =>
+    n.f.toLowerCase().includes(q) ||
+    n.name.toLowerCase().includes(q) ||
+    (n.vars||[]).some(v => v[2].toLowerCase().includes(q))
+  );
+  const hitIds = new Set(hits.map(n => n.id));
+  activeNodeId = null;
+  document.querySelectorAll('.node-card').forEach(el => {
+    el.classList.toggle('dimmed', !hitIds.has(el.dataset.id));
+    el.classList.remove('selected','neighbour');
+  });
+  if (hits.length === 1) selectNode(hits[0]);
+  drawLinks();
+});
+
+// Initial draw
+updatePositions();
+drawLinks();
+</script>
+</body>
+</html>
